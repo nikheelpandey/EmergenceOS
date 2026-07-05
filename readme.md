@@ -251,6 +251,7 @@ The process checkpoints while waiting. Grant approval from the REPL (`approve <r
 
 | Doc | Description |
 |-----|-------------|
+| [005-ux-vision.md](docs/005-ux-vision.md) | UX vision — Goals, Spaces, Knowledge, and the OS metaphor |
 | [architecture-diagram.md](docs/architecture-diagram.md) | Layered architecture with Mermaid diagrams |
 | [architecture.md](architecture.md) | Full system architecture reference |
 | [building-applications.md](docs/building-applications.md) | Plugin development guide |
