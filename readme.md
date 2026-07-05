@@ -2,528 +2,230 @@
 
 > An operating system for autonomous intelligence.
 
-EmergenceOS is an experimental operating system designed for AI agents instead of human applications. Rather than treating an agent as a single program, EmergenceOS treats intelligence as a collection of long-lived, event-driven processes that communicate through a kernel-managed runtime.
+EmergenceOS is an experimental kernel and runtime for AI agents. Instead of treating an agent as a single program, it runs intelligence as **long-lived, event-driven processes** coordinated by a capability-gated kernel.
 
-The project borrows architectural ideas from traditional operating systems such as Linux while replacing files and system calls with events, memories, tools, and autonomous processes.
-
-The goal is to create a runtime capable of hosting thousands of cooperating AI processes that can perceive, reason, plan, execute, and evolve over time.
+**Release:** [v0.1.0](https://github.com/nikheelpandey/EmergenceOS/releases/tag/v0.1.0) · **Tests:** 462 passing · **Milestones:** M1–M12 complete
 
 ---
 
-# Vision
+## What ships in v0.1
 
-Modern AI applications are typically built as request-response pipelines.
+| Layer | Components |
+|-------|------------|
+| **Kernel** | Scheduler, lifecycle, mailboxes, state store, process table |
+| **Security** | Capability-based access control on all gated services |
+| **Durability** | Memory manager, checkpoints, event sourcing + replay |
+| **Execution** | Executor, Python runner, tool request model |
+| **Observability** | Metrics, tracing, audit CLI (`./eos`) |
+| **Plugins** | Auto-discovery from `plugins/` via `plugin.yaml` |
+| **Cognitive** | Goal → Plan → Task orchestration API |
+| **Apps** | hello_world, system-model demo, cognitive demo, long-running services |
 
-```
-User
-  │
-  ▼
-LLM
-  │
-  ▼
-Response
-```
+The kernel **never calls an LLM**. Reasoning lives in plugins you install.
 
-Even "agentic" systems usually consist of a workflow wrapped around an LLM.
+---
 
-EmergenceOS takes a different approach.
+## Quick start
 
-Instead of building an application that contains agents, we build an operating system that runs agents.
+```bash
+# Clone and enter the project
+git clone git@github.com:nikheelpandey/EmergenceOS.git
+cd EmergenceOS
 
-```
-                 EmergenceOS
+# Create a virtual environment (recommended)
+python3 -m venv .venv
+source .venv/bin/activate
 
-         ┌────────────────────────┐
-         │        Kernel          │
-         └──────────┬─────────────┘
-                    │
-      ┌─────────────┼─────────────┐
-      │             │             │
- Process A      Process B     Process C
-      │             │             │
-      └────── Event Bus ──────────┘
-                    │
-            Shared Memory
+# Run the default hello_world plugin
+python boot.py
 ```
 
-Processes become autonomous computational units that react to events, maintain state, invoke tools, and collaborate with one another.
+### Boot modes
 
----
-
-# Core Principles
-
-## Event Driven
-
-Everything happens because of an event.
-
-Examples:
-
-- User message
-- Scheduled timer
-- Memory updated
-- Tool completed
-- Process finished
-- External webhook
-- Sensor input
-
-Processes subscribe to the events they care about.
-
----
-
-## Long-lived Processes
-
-Unlike stateless API calls, EmergenceOS processes persist.
-
-A process may:
-
-- sleep
-- wait
-- wake
-- maintain state
-- remember previous executions
-- communicate with other processes
-
----
-
-## Autonomous Intelligence
-
-The kernel does not know what an LLM is.
-
-It simply schedules processes.
-
-Some processes may:
-
-- call an LLM
-- execute Python
-- search memory
-- query databases
-- invoke APIs
-
-Everything is simply another executable process.
-
----
-
-## Modular
-
-Every capability is isolated.
-
-Examples:
-
-- Planner
-- Researcher
-- Calendar
-- Email
-- Memory
-- Reflection
-- Vision
-- Speech
-- Browser
-
-Each capability is just another process.
-
----
-
-## Composable
-
-Small intelligent processes combine into larger systems.
-
+```bash
+python boot.py              # hello_world plugin (default)
+python boot.py --demo       # multi-process research pipeline
+python boot.py --goal       # Goal → Plan → Tasks cognitive demo
+python boot.py --services   # long-running service fleet
 ```
-Research Request
 
-      │
-      ▼
+### CLI
 
- Planner
+```bash
+./eos ps                    # list processes
+./eos sched                 # scheduler view
+./eos state                 # state store
+./eos budget                # resource usage
+./eos trace <correlation_id>
+```
 
-      │
+### Tests
 
- ┌────┴─────┐
- │          │
-
-Search    Literature
-
- │          │
-
- └────┬─────┘
-      ▼
-
-Summarizer
-
-      ▼
-
-Report Generator
+```bash
+pytest
 ```
 
 ---
 
-# Architecture
+## Architecture
 
 ```
-emergenceos/
-│
-├── kernel/
-│   ├── kernel.py
-│   ├── scheduler.py
-│   ├── executor.py
-│   ├── event_bus.py
-│   ├── process_registry.py
-│   └── boot.py
-│
-├── core/
-│   ├── process.py
-│   ├── process_definition.py
-│   ├── event.py
-│   ├── event_handler.py
-│   ├── event_subscription.py
-│   └── process_state.py
-│
-├── runners/
-│   ├── runner.py
-│   └── python_runner.py
-│
-├── memory/
-│
-├── tools/
-│
-├── agents/
-│
-├── services/
-│
-└── examples/
+                    ┌─────────────────┐
+                    │     Kernel      │
+                    │ scheduler · bus │
+                    └────────┬────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        ▼                    ▼                    ▼
+   Process A           Process B           Process C
+   (plugin)            (plugin)            (plugin)
+        │                    │                    │
+        └──────── mailboxes / events ─────────────┘
+                             │
+                    state · memory · tools
 ```
 
----
+Every process receives a `ProcessContext` with gated access to kernel services. Processes communicate via **mailboxes** (mediated by events), not direct calls.
 
-# Current Features
-
-Current implementation includes:
-
-- Event Bus
-- Kernel
-- Process Registry
-- Scheduler
-- Executor
-- Boot sequence
-- Process Definition
-- Runtime Process model
-- Runner abstraction
-- Python Runner
-- Dynamic process loading
-- Event publishing
-- Event subscriptions
-
-Together these components form the first working vertical slice of EmergenceOS.
-
----
-
-# Runtime Flow
+### Project layout
 
 ```
-Boot
-
- │
-
- ▼
-
-Kernel Starts
-
- │
-
- ▼
-
-Load Process Definitions
-
- │
-
- ▼
-
-Register Processes
-
- │
-
- ▼
-
-Subscribe to Events
-
- │
-
- ▼
-
-Wait for Events
-
- │
-
- ▼
-
-Event Published
-
- │
-
- ▼
-
-Scheduler Finds Subscribers
-
- │
-
- ▼
-
-Executor Executes Process
-
- │
-
- ▼
-
-Runner Invokes Implementation
-
- │
-
- ▼
-
-Process Emits New Events
-
- │
-
- ▼
-
-Repeat
+EmergenceOS/
+├── boot.py                 # Boot entrypoint
+├── eos                     # CLI wrapper
+├── emergence/              # Kernel and runtime
+│   ├── kernel/             # Kernel, lifecycle, mailboxes, boot
+│   ├── scheduler/          # Priority queue, WAITING/BLOCKED
+│   ├── executor/           # Runners and tool executor
+│   ├── security/           # Capabilities and gated services
+│   ├── memory/             # Working / episodic / semantic memory
+│   ├── checkpoint/         # Process snapshots
+│   ├── events/             # Event bus, store, replay
+│   ├── cognitive/          # Goal / Plan / Task manager
+│   ├── plugins/            # Plugin loader and manager
+│   └── observability/      # Metrics, trace, CLI display
+├── plugins/                # Installable applications
+├── tests/                  # Unit and integration tests
+└── docs/                   # Architecture and guides
 ```
 
 ---
 
-# Process Lifecycle
+## Build a custom application
+
+Applications are plugins. Drop a folder in `plugins/`:
 
 ```
-           CREATED
-
-               │
-
-               ▼
-
-          REGISTERED
-
-               │
-
-               ▼
-
-            WAITING
-
-               │
-
-      Event Received
-
-               ▼
-
-            READY
-
-               │
-
-               ▼
-
-           RUNNING
-
-         /     |      \
-
- Completed  Sleeping  Failed
-
-     │          │        │
-
-     └──────────┴────────┘
-
-            WAITING
+plugins/my_app/
+├── plugin.yaml
+└── my_app.py
 ```
 
----
-
-# Event Model
-
-Events are immutable objects representing something that happened.
-
-Example:
+```yaml
+# plugin.yaml
+name: my_app
+version: 1.0.0
+entrypoint: my_app:run
+runner: python
+required_capabilities:
+  - state.read
+  - state.write
+```
 
 ```python
-UserMessageReceived(
-    conversation_id="123",
-    user_id="abc",
-    text="Plan my trip to Japan"
-)
+# my_app.py
+from emergence.core.process_context import ProcessContext
+
+def run(context: ProcessContext) -> str:
+    context.state.set("status", "running")
+    return "ok"
 ```
 
-The event bus distributes events to every subscribed process.
-
-Processes remain loosely coupled because they communicate only through events.
+**Full guide:** [docs/building-applications.md](docs/building-applications.md)
 
 ---
 
-# Process Model
+## Long-running processes
 
-Every process consists of:
+Services survive across scheduler rounds by:
 
-- Identity
-- Metadata
-- Event subscriptions
-- Runtime state
-- Runner
-- Execution logic
+1. Persisting stage in **working memory**
+2. Ending each round with `context.wait_for_message()` → `WAITING` + auto-checkpoint
+3. Waking on `MessageReceivedEvent` → `READY` → re-executed
 
-A process never calls another process directly.
+Reference implementations: `plugins/heartbeat/`, `plugins/orchestrator/`, `emergence/apps/long_running_runtime.py`.
 
-Instead:
+Run the fleet demo:
 
-```
-Process A
-
-    │
-
-Publish Event
-
-    │
-
-Event Bus
-
-    │
-
-Process B reacts
+```bash
+python boot.py --services
 ```
 
-This eliminates tight coupling between intelligent components.
+---
+
+## Cognitive orchestration
+
+```python
+from emergence.cognitive.manager import TaskSpec
+
+goal = kernel.create_goal("Write technical report")
+plan = kernel.create_plan(goal.goal_id, [
+    TaskSpec("research", "worker", priority=5),
+    TaskSpec("summarize", "worker", dependencies=("research",)),
+])
+kernel.execute_plan(plan.plan_id)
+```
+
+Tasks map to plugin processes. Dependencies feed the scheduler. Decomposition is explicit or delegated to a planner plugin — not built into the kernel.
 
 ---
 
-# Runners
+## Documentation
 
-A runner defines how a process executes.
-
-Current implementation:
-
-- Python Runner
-
-Future runners may include:
-
-- Docker
-- JavaScript
-- WASM
-- Remote workers
-- Kubernetes Jobs
-- Serverless functions
+| Doc | Description |
+|-----|-------------|
+| [building-applications.md](docs/building-applications.md) | Plugin development guide |
+| [milestone.md](milestone.md) | Kernel milestone tracker (M1–M12) |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
+| [001-principles.md](docs/001-principles.md) | Design principles |
+| [003-system-model.md](docs/003-system-model.md) | System model |
+| [004-things-that-cannot-exist.md](docs/004-things-that-cannot-exist.md) | Architectural constraints |
 
 ---
 
-# Future Roadmap
+## Roadmap (cognitive / AI apps)
 
-## Memory
+M1–M12 delivered the kernel. Next milestones target **AI applications that run on this OS**:
 
-- Episodic memory
-- Semantic memory
-- Vector search
-- Knowledge graphs
+| ID | Milestone | Goal |
+|----|-----------|------|
+| M13 | LLM Tool Provider | Ollama / OpenAI as budgeted tools via `ToolExecutor` |
+| M14 | Planner Plugin | LLM-driven Goal → Task decomposition (kernel stays LLM-free) |
+| M15 | Memory + RAG | Vector search over episodic/semantic memory |
+| M16 | Researcher / Evaluator | Multi-agent research loop with reflection |
+| M17 | Human-in-the-loop | `USER_*` events, approval gates, interrupt/resume |
+| M18 | Reference AI App | End-to-end Research Assistant on EmergenceOS |
 
----
-
-## Scheduling
-
-- Priority queues
-- Resource limits
-- Process quotas
-- Time slicing
+Details in [milestone.md](milestone.md#future-cognitive--ai-milestones).
 
 ---
 
-## Multi-Agent Coordination
+## Core principles
 
-- Delegation
-- Negotiation
-- Shared goals
-- Swarm execution
-
----
-
-## Planning
-
-- Goal decomposition
-- Reflection
-- Self-improvement
-- Recovery
-- Retry policies
+- **Event-driven** — everything happens because of an observable event
+- **Long-lived processes** — sleep, wait, wake, checkpoint, resume
+- **Kernel never thinks** — reasoning is a managed resource in plugins
+- **Capability security** — least privilege on every gated service
+- **Composition** — small processes combine into larger systems
 
 ---
 
-## Tools
+## Status
 
-- Browser
-- Filesystem
-- Email
-- Calendar
-- Databases
-- APIs
-- Code execution
+**v0.1.0** — First release. Kernel infrastructure is functional; cognitive AI apps are the next focus.
 
 ---
 
-## Security
+## License
 
-- Permissions
-- Sandboxing
-- Capability-based execution
-- Process isolation
-
----
-
-## Distributed Runtime
-
-- Multiple kernels
-- Cluster scheduling
-- Distributed event bus
-- Distributed memory
-- Horizontal scaling
-
----
-
-# Long-Term Vision
-
-Imagine running an AI operating system where hundreds or thousands of autonomous processes are continuously working:
-
-- Monitoring your email
-- Planning your schedule
-- Managing projects
-- Conducting research
-- Learning your preferences
-- Reflecting on past decisions
-- Coordinating with other agents
-- Executing long-running tasks
-
-Instead of repeatedly asking an assistant to perform tasks, you own an operating system whose primary abstraction is autonomous intelligence.
-
-EmergenceOS aims to provide the runtime that makes this possible.
-
----
-
-# Status
-
-**Project Stage:** Early prototype
-
-The current focus is building a robust kernel and runtime before adding higher-level AI capabilities.
-
-The architecture follows a vertical-slice approach, ensuring each layer is functional before expanding the system.
-
----
-
-# Inspiration
-
-EmergenceOS draws inspiration from:
-
-- Linux and Unix process architecture
-- Event-driven systems
-- Actor model
-- Erlang/OTP
-- Microkernel operating systems
-- Multi-agent systems
-- Modern AI agent architectures
-
-While inspired by these systems, EmergenceOS is designed specifically for autonomous intelligence rather than traditional software applications.
-
----
-
-# License
-
-This project is currently under active development.
-License information will be added in a future release.
+Active development. License to be added in a future release.

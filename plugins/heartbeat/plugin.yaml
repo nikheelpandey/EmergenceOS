@@ -1,0 +1,17 @@
+name: heartbeat
+version: 1.0.0
+description: Long-running heartbeat monitor — pings, checkpoints, and waits.
+entrypoint: heartbeat:run
+runner: python
+max_execution_time_seconds: 3600
+required_capabilities:
+  - memory.read
+  - memory.write
+  - state.read
+  - state.write
+  - message.send
+  - checkpoint.create
+supported_events:
+  - process.waiting
+  - message.received
+  - checkpoint.created

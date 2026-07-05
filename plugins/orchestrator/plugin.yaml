@@ -1,0 +1,16 @@
+name: orchestrator
+version: 1.0.0
+description: Coordinates long-running services across multiple execution rounds.
+entrypoint: orchestrator:run
+runner: python
+max_execution_time_seconds: 3600
+required_capabilities:
+  - memory.read
+  - memory.write
+  - state.read
+  - state.write
+  - message.send
+supported_events:
+  - message.received
+  - process.waiting
+  - goal.in_progress

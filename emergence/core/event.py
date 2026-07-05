@@ -43,17 +43,22 @@ class EventType(str, Enum):
     # ------------------------------------------------------------------
 
     TASK_CREATED = "task.created"
+    TASK_READY = "task.ready"
     TASK_STARTED = "task.started"
     TASK_COMPLETED = "task.completed"
     TASK_FAILED = "task.failed"
+    TASK_CANCELLED = "task.cancelled"
 
     # ------------------------------------------------------------------
     # Goal Events
     # ------------------------------------------------------------------
 
     GOAL_CREATED = "goal.created"
+    GOAL_PLANNING = "goal.planning"
+    GOAL_IN_PROGRESS = "goal.in_progress"
     GOAL_COMPLETED = "goal.completed"
     GOAL_FAILED = "goal.failed"
+    GOAL_CANCELLED = "goal.cancelled"
 
     # ------------------------------------------------------------------
     # Plan Events
@@ -95,6 +100,13 @@ class EventType(str, Enum):
     PROCESS_DISPATCHED = "process.dispatched"
 
     # ------------------------------------------------------------------
+    # Plugin Events
+    # ------------------------------------------------------------------
+
+    PLUGIN_LOADED = "plugin.loaded"
+    PLUGIN_UNLOADED = "plugin.unloaded"
+
+    # ------------------------------------------------------------------
     # Kernel Events
     # ------------------------------------------------------------------
 
@@ -108,6 +120,21 @@ class EventType(str, Enum):
     USER_INPUT = "user.input"
     USER_APPROVED = "user.approved"
     USER_CANCELLED = "user.cancelled"
+
+
+    # ------------------------------------------------------------------
+    # Message Events
+    # ------------------------------------------------------------------
+
+    MESSAGE_RECEIVED = "message.received"
+
+    # ------------------------------------------------------------------
+    # State Events
+    # ------------------------------------------------------------------
+
+    STATE_CREATED = "state.created"
+    STATE_CHANGED = "state.changed"
+    STATE_DELETED = "state.deleted"
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,11 @@
+name: worker
+version: 1.0.0
+description: Generic cognitive worker task process.
+entrypoint: worker:run
+runner: python
+required_capabilities:
+  - state.read
+  - state.write
+supported_events:
+  - task.started
+  - task.completed

@@ -21,7 +21,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from emergence.core.process import Process
+from emergence.core.process_context import ProcessContext
 
 
 class Runner(ABC):
@@ -42,14 +42,14 @@ class Runner(ABC):
     """
 
     @abstractmethod
-    def run(self, process: Process) -> Any:
+    def run(self, context: ProcessContext) -> Any:
         """
         Execute a process.
 
         Parameters
         ----------
-        process:
-            The process to execute.
+        context:
+            Runtime context for the executing process.
 
         Returns
         -------

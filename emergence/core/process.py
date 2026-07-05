@@ -80,21 +80,14 @@ class Process:
     # ------------------------------------------------------------------
 
     def transition_to(self, new_state: ProcessState) -> None:
-        """
-        Transition this process to a new lifecycle state.
-
-        Raises
-        ------
-        ValueError
-            If the requested transition is invalid.
-        """
+        if new_state == self.state:
+            return  # idempotent no-op
 
         allowed = PROCESS_STATE_TRANSITIONS[self.state]
 
         if new_state not in allowed:
             raise ValueError(
-                f"Invalid transition "
-                f"{self.state.value} -> {new_state.value}"
+                f"Invalid transition {self.state.value} -> {new_state.value}"
             )
 
         self.state = new_state
@@ -124,8 +117,8 @@ class Process:
 
     def fail(self, reason: str | None = None) -> None:
         """Transition the process to FAILED."""
-        self.failure_reason = reason
         self.transition_to(ProcessState.FAILED)
+        self.failure_reason = reason
 
     def cancel(self) -> None:
         """Transition the process to CANCELLED."""

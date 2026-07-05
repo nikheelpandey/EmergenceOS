@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from emergence.core.process import Process
+from emergence.core.process_context import ProcessContext
 from emergence.executor.runner import Runner
 
 
@@ -97,7 +97,7 @@ class Executor:
     # Execution
     # ------------------------------------------------------------------
 
-    def execute(self, process: Process) -> Any:
+    def execute(self, context: ProcessContext) -> Any:
         """
         Execute a process using its registered Runner.
 
@@ -106,7 +106,7 @@ class Executor:
         RunnerNotFoundError
             If no Runner is registered for the implementation.
         """
-        implementation = process.definition.implementation
+        implementation = context.definition.runner_key
 
         try:
             runner = self._runners[implementation]
@@ -115,7 +115,7 @@ class Executor:
                 f"No Runner registered for '{implementation}'."
             ) from exc
 
-        return runner.run(process)
+        return runner.run(context)
 
     # ------------------------------------------------------------------
     # Utilities

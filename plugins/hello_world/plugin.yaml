@@ -1,0 +1,10 @@
+name: hello_world
+version: 1.0.0
+description: Simple Hello World application.
+entrypoint: hello_world:run
+runner: python
+required_capabilities:
+  - tool.python
+supported_events:
+  - process.created
+  - tool.completed

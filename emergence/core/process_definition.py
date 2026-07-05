@@ -6,7 +6,7 @@ Defines the immutable ProcessDefinition model.
 A ProcessDefinition is a blueprint for creating Process instances.
 It describes what a process is, but contains no runtime state.
 
-The Kernel is responsible for resolving the implementation identifier
+The Kernel is responsible for resolving the execution spec
 to an executable runtime component.
 """
 
@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from emergence.core.budget import ResourceBudget
+from emergence.core.execution_spec import ExecutionSpec
 from emergence.core.ids import ProcessDefinitionID
 
 
@@ -39,8 +40,12 @@ class ProcessDefinition:
         Semantic version of this definition.
 
     implementation:
-        Identifier understood by the Kernel that resolves
-        to the executable implementation.
+        Legacy identifier resolving to the executable target.
+        Derived from execution_spec when provided.
+
+    execution_spec:
+        Structured execution descriptor separating runner
+        backend from target.
 
     default_budget:
         Default resource limits assigned to newly created
@@ -65,6 +70,8 @@ class ProcessDefinition:
 
     implementation: str = ""
 
+    execution_spec: ExecutionSpec | None = None
+
     default_budget: ResourceBudget = field(
         default_factory=ResourceBudget
     )
@@ -85,14 +92,22 @@ class ProcessDefinition:
         if not self.name.strip():
             raise ValueError("ProcessDefinition.name cannot be empty.")
 
-        if not self.implementation.strip():
-            raise ValueError(
-                "ProcessDefinition.implementation cannot be empty."
-            )
-
         if not self.version.strip():
             raise ValueError(
                 "ProcessDefinition.version cannot be empty."
+            )
+
+        if self.execution_spec is not None:
+            if not self.implementation:
+                object.__setattr__(
+                    self,
+                    "implementation",
+                    self.execution_spec.target,
+                )
+        elif not self.implementation.strip():
+            raise ValueError(
+                "ProcessDefinition requires implementation "
+                "or execution_spec."
             )
 
     @property
@@ -105,6 +120,13 @@ class ProcessDefinition:
         """
 
         return f"{self.name}@{self.version}"
+
+    @property
+    def runner_key(self) -> str:
+        """Return the key used to resolve the Executor runner."""
+        if self.execution_spec is not None:
+            return self.execution_spec.target
+        return self.implementation
 
     def has_permission(self, permission: str) -> bool:
         """

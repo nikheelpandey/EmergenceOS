@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import importlib
 
-from emergence.core.process import Process
+from emergence.core.process_context import ProcessContext
 from emergence.executor.runner import Runner
 
 
@@ -25,8 +25,8 @@ class PythonRunner(Runner):
         examples.hello_world:run
     """
 
-    def run(self, process: Process):
-        implementation = process.definition.implementation
+    def run(self, context: ProcessContext):
+        implementation = context.definition.implementation
 
         module_name, function_name = implementation.split(":")
 
@@ -34,4 +34,4 @@ class PythonRunner(Runner):
 
         function = getattr(module, function_name)
 
-        return function(process)
+        return function(context)

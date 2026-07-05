@@ -15,106 +15,97 @@ Responsibilities
 This module intentionally contains no business logic.
 """
 
-from emergence.core.budget import ResourceBudget
-from emergence.core.process_definition import ProcessDefinition
+import sys
 
-from emergence.events.event_bus import EventBus
-
-from emergence.executor.executor import Executor
-from emergence.executor.python_runner import PythonRunner
-
-from emergence.kernel.kernel import Kernel
-from emergence.kernel.lifecycle import LifecycleManager
-from emergence.kernel.process_table import ProcessTable
-from emergence.kernel.registry import ProcessRegistry
-
-from emergence.scheduler.scheduler import Scheduler
+from emergence.cognitive.manager import TaskSpec
+from emergence.core.state import GoalState
+from emergence.kernel.boot_context import (
+    build_kernel,
+    build_long_running_services,
+    build_system_model_demo,
+)
 
 
-def build_kernel() -> Kernel:
-    """
-    Construct the EmergenceOS kernel and all core infrastructure.
-    """
+def build_cognitive_demo():
+    """Run a Goal → Plan → Tasks pipeline using the worker plugin."""
+    kernel = build_kernel(spawn=None, load_plugins=True, enable_supervisor=False)
 
-    # -------------------------------------------------------------
-    # Core Infrastructure
-    # -------------------------------------------------------------
+    goal = kernel.create_goal("Write technical report")
+    kernel.start_planning(goal.goal_id)
 
-    event_bus = EventBus()
-
-    process_table = ProcessTable()
-
-    scheduler = Scheduler()
-
-    executor = Executor()
-
-    registry = ProcessRegistry()
-
-    lifecycle = LifecycleManager()
-
-    # -------------------------------------------------------------
-    # Register Runners
-    # -------------------------------------------------------------
-
-    executor.register_runner(
-        "emergence.apps.hello_world:run",
-        PythonRunner(),
+    plan = kernel.create_plan(
+        goal.goal_id,
+        [
+            TaskSpec("research", "worker", priority=5),
+            TaskSpec(
+                "summarize",
+                "worker",
+                dependencies=("research",),
+                priority=3,
+            ),
+        ],
     )
-
-    # -------------------------------------------------------------
-    # Register Applications
-    # -------------------------------------------------------------
-
-    hello_world = ProcessDefinition(
-        name="hello_world",
-        description="Simple Hello World application.",
-        implementation="emergence.apps.hello_world:run",
-        default_budget=ResourceBudget(),
-    )
-
-    registry.register(hello_world)
-
-    # -------------------------------------------------------------
-    # Construct Kernel
-    # -------------------------------------------------------------
-
-    kernel = Kernel(
-        event_bus=event_bus,
-        process_table=process_table,
-        scheduler=scheduler,
-        executor=executor,
-    )
-
-    # -------------------------------------------------------------
-    # Temporary bootstrap
-    # -------------------------------------------------------------
-    #
-    # Until the Kernel owns a ProcessRegistry internally,
-    # we manually retrieve the ProcessDefinition and spawn it.
-    #
-
-    kernel.spawn(
-        registry.get("hello_world")
-    )
-    print(kernel.process_count())
-    print(kernel.has_work())
-    return kernel
+    kernel.execute_plan(plan.plan_id)
+    return kernel, goal, plan
 
 
 def main() -> None:
     """
     Boot EmergenceOS.
+
+    Usage
+    -----
+    python boot.py              # hello_world plugin
+    python boot.py --demo       # system-model simulation
+    python boot.py --goal       # cognitive Goal → Plan → Tasks demo
+    python boot.py --services   # long-running service fleet demo
     """
+    demo_mode = "--demo" in sys.argv
+    goal_mode = "--goal" in sys.argv
+    services_mode = "--services" in sys.argv
 
     print()
     print("=" * 60)
-    print("Booting EmergenceOS...")
+    if demo_mode:
+        print("Booting EmergenceOS — System Model Simulation")
+    elif goal_mode:
+        print("Booting EmergenceOS — Cognitive Goal Demo")
+    elif services_mode:
+        print("Booting EmergenceOS — Long-Running Services")
+    else:
+        print("Booting EmergenceOS...")
     print("=" * 60)
     print()
 
-    kernel = build_kernel()
+    if demo_mode:
+        kernel = build_system_model_demo()
+    elif goal_mode:
+        kernel, goal, plan = build_cognitive_demo()
+    elif services_mode:
+        kernel = build_long_running_services()
+    else:
+        kernel = build_kernel()
 
     kernel.run()
+
+    if services_mode:
+        state = kernel.context.state
+        print()
+        print("Orchestrator:", state.get("orchestrator_status"))
+        print("Heartbeat:", state.get("heartbeat"))
+        print("Events collected:", state.get("events_collected"))
+        print("Waiting processes:", len(kernel.context.scheduler.waiting_ids()))
+        print("Event log size:", kernel.context.event_store.count(), "events")
+    elif goal_mode:
+        print()
+        print("Goal state:", goal.state.value)
+        print("Plan state:", plan.state.value)
+    elif demo_mode:
+        state = kernel.context.state
+        print()
+        print("Pipeline status:", state.get("pipeline_status"))
+        print("Research:", state.get("research_findings", "—")[:80])
+        print("Evaluation:", state.get("evaluation", "—"))
 
     print()
     print("=" * 60)
@@ -125,5 +116,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-    

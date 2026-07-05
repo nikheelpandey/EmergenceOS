@@ -1,0 +1,11 @@
+name: planner
+version: 1.0.0
+description: Decomposes goals into plans without LLM inference.
+entrypoint: planner:run
+runner: python
+required_capabilities:
+  - state.read
+  - state.write
+supported_events:
+  - goal.created
+  - plan.created

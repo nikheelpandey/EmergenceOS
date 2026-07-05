@@ -97,6 +97,8 @@ PROCESS_STATE_TRANSITIONS: Final[dict[ProcessState, set[ProcessState]]] = {
         ProcessState.BLOCKED,
         ProcessState.COMPLETED,
         ProcessState.FAILED,
+        ProcessState.CANCELLED,   # ADD THIS
+
     },
     ProcessState.WAITING: {
         ProcessState.READY,
