@@ -13,11 +13,19 @@ from emergence.executor.tool_model import (
     ToolResult,
     ToolRequestedEvent,
 )
-from emergence.security.capabilities import TOOL_PYTHON
+from emergence.security.capabilities import TOOL_LLM, TOOL_PYTHON
+from emergence.security.capability import Capability
 from emergence.security.errors import PermissionDeniedError
 from emergence.security.security_manager import SecurityManager
 
-ToolHandler = Callable[[dict[str, Any]], Any]
+ToolHandler = Callable[[dict[str, Any], ProcessID], Any]
+
+
+def capability_for_tool(tool_name: str) -> Capability:
+    """Return the capability required to invoke a tool."""
+    if tool_name.startswith("llm."):
+        return TOOL_LLM
+    return TOOL_PYTHON
 
 
 class ToolRegistry:
@@ -37,14 +45,19 @@ class ToolRegistry:
     def has(self, name: str) -> bool:
         return name in self._tools
 
-    def invoke(self, name: str, arguments: dict[str, Any]) -> Any:
+    def invoke(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        process_id: ProcessID,
+    ) -> Any:
         try:
             handler = self._tools[name]
         except KeyError as exc:
             raise KeyError(
                 f"No tool registered for '{name}'."
             ) from exc
-        return handler(arguments)
+        return handler(arguments, process_id)
 
 
 class ToolExecutor:
@@ -73,9 +86,10 @@ class ToolExecutor:
     ) -> ToolResult:
         pid = str(process_id)
 
+        required = capability_for_tool(request.tool_name)
         self._security.require(
             pid,
-            TOOL_PYTHON,
+            required,
             operation=f"tool.invoke('{request.tool_name}')",
         )
 
@@ -88,13 +102,28 @@ class ToolExecutor:
         self._event_bus.publish(requested)
 
         try:
-            result = self._registry.invoke(
+            raw = self._registry.invoke(
                 request.tool_name,
                 request.arguments,
+                process_id,
             )
+            tokens = 0
+            cost_usd = 0.0
+            result = raw
+
+            if isinstance(raw, dict):
+                tokens = int(raw.pop("tokens_used", 0))
+                cost_usd = float(raw.pop("cost_usd", 0.0))
+                if "content" in raw and len(raw) == 1:
+                    result = raw["content"]
+                elif "content" in raw:
+                    result = raw.get("content", raw)
+
             self._budgets.record_execution(
                 process_id,
                 tool_invocations=1,
+                tokens=tokens,
+                cost_usd=cost_usd,
             )
             self._event_bus.publish(
                 ToolCompletedEvent(
@@ -103,7 +132,7 @@ class ToolExecutor:
                     source_process=process_id,
                     causation_id=requested.event_id,
                     correlation_id=requested.correlation_id,
-                    payload={"result": result},
+                    payload={"result": result, "tokens_used": tokens},
                 )
             )
             return ToolResult(

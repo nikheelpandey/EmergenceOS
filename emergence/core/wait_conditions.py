@@ -47,3 +47,20 @@ class TimerWaitCondition(WaitCondition):
 
     def is_satisfied(self) -> bool:
         return datetime.now(UTC) >= self._wake_at
+
+
+class ApprovalWaitCondition(WaitCondition):
+    """
+    Resume when a user approval has been recorded in the StateStore.
+    """
+
+    def __init__(self, request_id: str, store: StateStore) -> None:
+        self._key = f"approval:{request_id}"
+        self._store = store
+
+    @property
+    def request_id(self) -> str:
+        return self._key.removeprefix("approval:")
+
+    def is_satisfied(self) -> bool:
+        return self._store.exists(self._key)

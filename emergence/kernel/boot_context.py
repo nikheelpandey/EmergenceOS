@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from emergence.checkpoint.checkpoint_manager import CheckpointManager
 from emergence.cognitive.manager import CognitiveManager
@@ -10,6 +11,7 @@ from emergence.events.event_store import EventStore
 from emergence.events.persisting_event_bus import PersistingEventBus
 from emergence.executor.executor import Executor
 from emergence.executor.tool_executor import ToolExecutor, ToolRegistry
+from emergence.tools.registry_setup import register_kernel_tools
 from emergence.kernel.context import KernelContext
 from emergence.kernel.kernel import Kernel
 from emergence.kernel.lifecycle import LifecycleManager
@@ -32,6 +34,8 @@ PLUGINS_ROOT = PROJECT_ROOT / "plugins"
 
 def create_kernel_context(
     executor: Executor | None = None,
+    *,
+    llm_provider: Any | None = None,
 ) -> KernelContext:
     """
     Construct and wire together every core kernel service.
@@ -61,12 +65,13 @@ def create_kernel_context(
         budgets,
     )
 
-    exec_ = executor or Executor()
+    exec_ = executor if executor is not None else Executor()
 
     tool_registry = ToolRegistry()
-    tool_registry.register(
-        "echo",
-        lambda args: args.get("message", ""),
+    register_kernel_tools(
+        tool_registry,
+        memory=memory,
+        llm_provider=llm_provider,
     )
     tools = ToolExecutor(
         tool_registry,
@@ -259,6 +264,41 @@ def build_long_running_services() -> Kernel:
 
     kernel.spawn(
         ctx.registry.get("orchestrator"),
+        priority=10,
+    )
+
+    return kernel
+
+
+def build_plan_demo(topic: str) -> tuple[Kernel, "Goal", "Plan"]:
+    """
+    Boot kernel, run LLM planner for a goal, and return before execution.
+    """
+    from emergence.core.goal import Goal
+    from emergence.core.plan import Plan
+
+    kernel = build_kernel(spawn=None, load_plugins=True, enable_supervisor=True)
+    goal, plan = kernel.create_plan_from_goal(topic)
+    kernel.context.state.set("research_topic", topic)
+    return kernel, goal, plan
+
+
+def build_research_assistant(
+    topic: str,
+    *,
+    auto_approve: bool = True,
+) -> Kernel:
+    """
+    Boot the research assistant plugin for an end-to-end cognitive demo.
+    """
+    kernel = build_kernel(spawn=None, load_plugins=True, enable_supervisor=True)
+    ctx = kernel.context
+
+    ctx.state.set("research_topic", topic)
+    ctx.state.set("auto_approve", auto_approve)
+
+    kernel.spawn(
+        ctx.registry.get("research_assistant"),
         priority=10,
     )
 

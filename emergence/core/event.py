@@ -118,8 +118,17 @@ class EventType(str, Enum):
     # ------------------------------------------------------------------
 
     USER_INPUT = "user.input"
+    USER_MESSAGE_RECEIVED = "user.message_received"
+    USER_APPROVAL_REQUESTED = "user.approval_requested"
+    USER_APPROVAL_GRANTED = "user.approval_granted"
     USER_APPROVED = "user.approved"
     USER_CANCELLED = "user.cancelled"
+
+    # ------------------------------------------------------------------
+    # Evaluation Events
+    # ------------------------------------------------------------------
+
+    EVALUATION_COMPLETED = "evaluation.completed"
 
 
     # ------------------------------------------------------------------

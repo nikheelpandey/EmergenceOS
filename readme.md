@@ -4,7 +4,7 @@
 
 EmergenceOS is an experimental kernel and runtime for AI agents. Instead of treating an agent as a single program, it runs intelligence as **long-lived, event-driven processes** coordinated by a capability-gated kernel.
 
-**Release:** [v0.1.0](https://github.com/nikheelpandey/EmergenceOS/releases/tag/v0.1.0) · **Tests:** 462 passing · **Milestones:** M1–M12 complete
+**Release:** [v0.2.0](CHANGELOG.md) · **Tests:** 486 passing · **Milestones:** M1–M18 complete
 
 ---
 
@@ -19,7 +19,9 @@ EmergenceOS is an experimental kernel and runtime for AI agents. Instead of trea
 | **Observability** | Metrics, tracing, audit CLI (`./eos`) |
 | **Plugins** | Auto-discovery from `plugins/` via `plugin.yaml` |
 | **Cognitive** | Goal → Plan → Task orchestration API |
-| **Apps** | hello_world, system-model demo, cognitive demo, long-running services |
+| **AI Tools** | `llm.chat` (Ollama/OpenAI/mock), `memory.search` RAG |
+| **AI Plugins** | LLM planner, researcher, evaluator, research assistant |
+| **Apps** | hello_world, system-model demo, cognitive demo, long-running services, research assistant |
 
 The kernel **never calls an LLM**. Reasoning lives in plugins you install.
 
@@ -36,18 +38,34 @@ cd EmergenceOS
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Run the default hello_world plugin
+# Run the persistent OS (default — runs until Ctrl+C)
 python boot.py
+
+# Batch one-shot demos (drain and exit)
+python boot.py --once --hello
+python boot.py --once --demo
+python boot.py --once --goal
+python boot.py --once --services
+
+# Persistent OS + spawn work immediately
+python boot.py --research "topic"
+python boot.py --goal
+
+# Or via eos CLI
+./eos serve
 ```
 
-### Boot modes
+At the `eos>` prompt you can spawn plugins, run research, and inspect the live system:
 
-```bash
-python boot.py              # hello_world plugin (default)
-python boot.py --demo       # multi-process research pipeline
-python boot.py --goal       # Goal → Plan → Tasks cognitive demo
-python boot.py --services   # long-running service fleet
 ```
+eos> help
+eos> ps
+eos> spawn researcher
+eos> research "event-driven architecture"
+eos> quit
+```
+
+Set `EMERGENCE_LLM_PROVIDER=ollama` for real LLM inference (default: `mock`).
 
 ### CLI
 
@@ -57,6 +75,7 @@ python boot.py --services   # long-running service fleet
 ./eos state                 # state store
 ./eos budget                # resource usage
 ./eos trace <correlation_id>
+./eos approve <request_id>  # grant pending user approval
 ```
 
 ### Tests
@@ -193,20 +212,18 @@ Tasks map to plugin processes. Dependencies feed the scheduler. Decomposition is
 
 ---
 
-## Roadmap (cognitive / AI apps)
+## Roadmap
 
-M1–M12 delivered the kernel. Next milestones target **AI applications that run on this OS**:
+M1–M18 delivered the kernel and reference cognitive AI stack. Future work:
 
-| ID | Milestone | Goal |
-|----|-----------|------|
-| M13 | LLM Tool Provider | Ollama / OpenAI as budgeted tools via `ToolExecutor` |
-| M14 | Planner Plugin | LLM-driven Goal → Task decomposition (kernel stays LLM-free) |
-| M15 | Memory + RAG | Vector search over episodic/semantic memory |
-| M16 | Researcher / Evaluator | Multi-agent research loop with reflection |
-| M17 | Human-in-the-loop | `USER_*` events, approval gates, interrupt/resume |
-| M18 | Reference AI App | End-to-end Research Assistant on EmergenceOS |
+| Area | Direction |
+|------|-----------|
+| Distributed runtime | Multiple kernels, cluster scheduling |
+| Advanced memory | Chroma/vector DB backends, knowledge graphs |
+| HTTP ingress | User events and approval via REST API |
+| Additional runners | Docker, WASM execution backends |
 
-Details in [milestone.md](milestone.md#future-cognitive--ai-milestones).
+Details in [milestone.md](milestone.md).
 
 ---
 
@@ -222,7 +239,7 @@ Details in [milestone.md](milestone.md#future-cognitive--ai-milestones).
 
 ## Status
 
-**v0.1.0** — First release. Kernel infrastructure is functional; cognitive AI apps are the next focus.
+**v0.2.0** — Cognitive AI stack complete (M13–M18). Kernel + LLM tools, RAG, planner, researcher/evaluator, human-in-the-loop, and research assistant ship together.
 
 ---
 

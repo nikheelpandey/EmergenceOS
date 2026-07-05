@@ -30,6 +30,9 @@ Non-Responsibilities
 
 from __future__ import annotations
 
+import signal
+import threading
+import time
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -77,6 +80,7 @@ class Kernel:
         self._ctx = ctx
         self._executor = executor
         self._lifecycle = lifecycle or LifecycleManager()
+        self._running = False
 
         self._ctx.scheduler._on_wake = self._wake_process  # noqa: SLF001
 
@@ -302,8 +306,82 @@ class Kernel:
         return False
 
     def run(self) -> None:
+        """Drain all runnable work and return (batch mode)."""
         while self.has_work():
             self.run_next()
+
+    def run_forever(
+        self,
+        *,
+        poll_interval: float = 0.05,
+    ) -> None:
+        """
+        Run the kernel until shutdown is requested.
+
+        Unlike ``run()``, the kernel stays alive when idle so
+        platform services in WAITING and external ingress can
+        wake processes. Terminates on SIGINT/SIGTERM or
+        ``shutdown()``.
+        """
+        self._running = True
+        on_main = threading.current_thread() is threading.main_thread()
+        previous_sigint = None
+        previous_sigterm = None
+
+        def _handle_signal(_signum: int, _frame: object) -> None:
+            self._running = False
+
+        if on_main:
+            previous_sigint = signal.getsignal(signal.SIGINT)
+            previous_sigterm = signal.getsignal(signal.SIGTERM)
+            signal.signal(signal.SIGINT, _handle_signal)
+            signal.signal(signal.SIGTERM, _handle_signal)
+
+        try:
+            while self._running:
+                self.tick()
+                if self.has_work():
+                    self.run_next()
+                else:
+                    time.sleep(poll_interval)
+        finally:
+            if on_main and previous_sigint is not None:
+                signal.signal(signal.SIGINT, previous_sigint)
+                signal.signal(signal.SIGTERM, previous_sigterm)
+            self._publish_shutdown()
+
+    def tick(self) -> None:
+        """
+        Evaluate waiting conditions and timer wakeups.
+
+        Called automatically by ``run_forever`` on each idle cycle.
+        """
+        self._ctx.scheduler.evaluate_waiting()
+
+        for process in self._ctx.process_table.all():
+            if process.state != ProcessState.WAITING:
+                continue
+            pid = str(process.process_id)
+            if self._ctx.mailboxes.pending(pid) > 0:
+                self._ctx.scheduler.evaluate_waiting()
+                break
+
+    def shutdown(self) -> None:
+        """Request graceful shutdown of ``run_forever``."""
+        self._running = False
+
+    @property
+    def is_running(self) -> bool:
+        """Return True while ``run_forever`` is active."""
+        return self._running
+
+    def live_process_count(self) -> int:
+        """Return processes that have not reached a terminal state."""
+        return sum(
+            1
+            for process in self._ctx.process_table.all()
+            if not process.is_finished
+        )
 
     # ------------------------------------------------------------------
     # Cognitive API (M12)
@@ -335,10 +413,87 @@ class Kernel:
         """Spawn and schedule processes for plan tasks."""
         self._ctx.cognitive.execute_plan(self, plan_id)
 
+    def spawn_planner_for_goal(self, goal_id: GoalID) -> Process:
+        """
+        Spawn the planner plugin to decompose a goal into task specs.
+
+        The planner reads ``planning_goal`` from state and writes
+        ``plan_artifact`` when complete.
+        """
+        goal = self._ctx.cognitive.get_goal(goal_id)
+        self._ctx.state.set("planning_goal", goal.description)
+        self._ctx.state.set("planning_goal_id", str(goal_id))
+        return self.spawn(
+            self._ctx.registry.get("planner"),
+            goal_id=goal_id,
+            priority=10,
+        )
+
+    def finalize_plan_from_planner(self, goal_id: GoalID) -> Plan:
+        """
+        Create a plan from the planner's ``plan_artifact`` in state.
+        """
+        import json
+
+        raw = self._ctx.state.get("plan_artifact")
+        if raw is None:
+            raise RuntimeError(
+                "plan_artifact not found — planner may not have completed."
+            )
+
+        specs_data = json.loads(raw) if isinstance(raw, str) else raw
+        task_specs = [
+            TaskSpec(
+                name=s["name"],
+                process_definition_name=s["process_definition_name"],
+                dependencies=tuple(s.get("dependencies", [])),
+                priority=int(s.get("priority", 0)),
+                expected_output=s.get("expected_output", ""),
+            )
+            for s in specs_data
+        ]
+        return self.create_plan(goal_id, task_specs)
+
+    def create_plan_from_goal(self, description: str) -> tuple[Goal, Plan]:
+        """
+        End-to-end: create goal, run planner, finalize plan.
+
+        Runs the kernel until the planner completes, then creates
+        the plan from the planner artifact.
+        """
+        goal = self.create_goal(description)
+        self.start_planning(goal.goal_id)
+        self.spawn_planner_for_goal(goal.goal_id)
+        self.run()
+        plan = self.finalize_plan_from_planner(goal.goal_id)
+        return goal, plan
+
+    def grant_user_approval(self, request_id: str) -> None:
+        """Record user approval and wake waiting processes."""
+        from emergence.events.user_events import UserApprovalGrantedEvent
+
+        self._ctx.state.set(f"approval:{request_id}", True)
+        self._ctx.event_bus.publish(
+            UserApprovalGrantedEvent(
+                request_id=request_id,
+                payload={"request_id": request_id},
+            )
+        )
+        self._ctx.scheduler.evaluate_waiting()
+
     @property
     def context(self) -> KernelContext:
         """Return the kernel service container."""
         return self._ctx
+
+    def _publish_shutdown(self) -> None:
+        self._ctx.state.set("os:status", "stopped")
+        self._ctx.event_bus.publish(
+            Event(
+                event_type=EventType.KERNEL_STOPPED,
+                payload={"live_processes": self.live_process_count()},
+            )
+        )
 
     # ------------------------------------------------------------------
     # Internal Helpers
@@ -399,6 +554,7 @@ class Kernel:
                 process.process_id,
             ),
             _mailbox_manager=self._ctx.mailboxes,
+            _state_store=self._ctx.state,
         )
 
     def _fail_process(self, process: Process, reason: str) -> None:

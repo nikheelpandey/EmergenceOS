@@ -160,6 +160,29 @@ def cmd_metrics(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_approve(args: argparse.Namespace) -> int:
+    kernel = _resolve_kernel(args)
+    kernel.grant_user_approval(args.request_id)
+    print(f"Approval granted for request {args.request_id}")
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    from emergence.kernel.ingress import KernelIngress
+    from emergence.kernel.runtime import build_runtime
+
+    kernel = build_runtime()
+    print("EmergenceOS persistent runtime started.")
+    print("Platform services: heartbeat, event_collector, job_worker")
+    print("Ctrl+C to shutdown.\n")
+
+    if sys.stdin.isatty() and not args.no_repl:
+        KernelIngress(kernel).run_repl_async()
+
+    kernel.run_forever()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="eos",
@@ -254,6 +277,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     metrics.add_argument("--demo", action="store_true")
     metrics.set_defaults(func=cmd_metrics)
+
+    approve = subparsers.add_parser(
+        "approve",
+        help="grant user approval for a pending request",
+    )
+    approve.add_argument("request_id")
+    approve.add_argument("--demo", action="store_true")
+    approve.set_defaults(func=cmd_approve)
+
+    serve = subparsers.add_parser(
+        "serve",
+        help="start persistent EmergenceOS runtime",
+    )
+    serve.add_argument(
+        "--no-repl",
+        action="store_true",
+        help="disable interactive shell",
+    )
+    serve.set_defaults(func=cmd_serve)
 
     return parser
 

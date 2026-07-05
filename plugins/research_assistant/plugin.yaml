@@ -1,0 +1,21 @@
+name: research_assistant
+version: 1.0.0
+description: End-to-end research pipeline with planning, RAG, evaluation, and approval.
+entrypoint: research_assistant:run
+runner: python
+required_capabilities:
+  - state.read
+  - state.write
+  - memory.read
+  - memory.write
+  - event.publish
+  - tool.llm
+  - tool.python
+  - checkpoint.create
+supported_events:
+  - user.approval_requested
+  - user.approval_granted
+  - evaluation.completed
+  - tool.requested
+  - tool.completed
+  - memory.stored

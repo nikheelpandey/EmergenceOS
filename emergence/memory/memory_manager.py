@@ -11,6 +11,7 @@ from emergence.events.memory_events import (
 )
 from emergence.memory.memory_category import MemoryCategory
 from emergence.memory.memory_store import MemoryStore
+from emergence.memory.vector_index import VectorIndex
 
 
 def _scoped_key(
@@ -36,6 +37,7 @@ class MemoryManager:
     ) -> None:
         self._store = store
         self._event_bus = event_bus
+        self._index = VectorIndex()
 
     def store(
         self,
@@ -47,6 +49,16 @@ class MemoryManager:
     ) -> None:
         scoped = _scoped_key(process_id, category, key)
         self._store.set(scoped, value)
+        if category in (MemoryCategory.EPISODIC, MemoryCategory.SEMANTIC):
+            self._index.add(
+                scoped,
+                str(value),
+                metadata={
+                    "process_id": str(process_id),
+                    "key": key,
+                    "category": category.value,
+                },
+            )
         self._event_bus.publish(
             MemoryStoredEvent(
                 process_id=process_id,
@@ -88,6 +100,7 @@ class MemoryManager:
         if not self._store.exists(scoped):
             return
         self._store.delete(scoped)
+        self._index.remove(scoped)
         self._event_bus.publish(
             MemoryDeletedEvent(
                 process_id=process_id,
@@ -116,3 +129,55 @@ class MemoryManager:
                 short_key = scoped_key[len(prefix):]
                 result[short_key] = self._store.get(scoped_key)
         return result
+
+    def search(
+        self,
+        process_id: ProcessID,
+        query: str,
+        *,
+        categories: list[MemoryCategory] | None = None,
+        top_k: int = 5,
+    ) -> list[dict[str, Any]]:
+        """
+        Search episodic and semantic memory via the vector index.
+
+        Results are scoped to the requesting process.
+        """
+        if categories is None:
+            categories = [
+                MemoryCategory.EPISODIC,
+                MemoryCategory.SEMANTIC,
+            ]
+
+        prefix_parts = [
+            f"{cat.value}:{process_id}:"
+            for cat in categories
+        ]
+
+        hits = self._index.search(query, top_k=top_k * 3)
+        results: list[dict[str, Any]] = []
+
+        for hit in hits:
+            if not any(hit.key.startswith(p) for p in prefix_parts):
+                continue
+
+            meta = hit.metadata
+            results.append({
+                "key": meta.get("key", hit.key),
+                "category": meta.get("category", ""),
+                "text": hit.text,
+                "score": round(hit.score, 4),
+            })
+            if len(results) >= top_k:
+                break
+
+        self._event_bus.publish(
+            MemoryRetrievedEvent(
+                process_id=process_id,
+                key=f"search:{query[:40]}",
+                category=MemoryCategory.SEMANTIC,
+                source_process=process_id,
+                payload={"query": query, "count": len(results)},
+            )
+        )
+        return results

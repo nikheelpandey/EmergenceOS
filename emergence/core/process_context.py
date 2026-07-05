@@ -8,7 +8,12 @@ from emergence.core.ids import GoalID, ProcessID
 from emergence.core.process_definition import ProcessDefinition
 from emergence.core.process_waiting import ProcessWaiting
 from emergence.core.wait_condition import WaitCondition
-from emergence.core.wait_conditions import MessageWaitCondition
+from emergence.core.wait_conditions import (
+    ApprovalWaitCondition,
+    MessageWaitCondition,
+)
+from emergence.events.user_events import UserApprovalRequestedEvent
+from emergence.kernel.state_store import StateStore
 from emergence.events.event_store import EventStore
 from emergence.executor.tool_executor import ToolExecutor
 from emergence.kernel.mailbox_manager import MailboxManager
@@ -47,6 +52,7 @@ class ProcessContext:
     checkpoints: GatedCheckpointManager
     tools: GatedToolAccess
     _mailbox_manager: MailboxManager
+    _state_store: StateStore
 
     def wait(self, condition: WaitCondition) -> None:
         """
@@ -67,3 +73,27 @@ class ProcessContext:
                 self._mailbox_manager,
             )
         )
+
+    def wait_for_approval(
+        self,
+        request_id: str,
+        *,
+        message: str = "",
+    ) -> None:
+        """
+        Yield until a user grants approval for the given request.
+
+        Publishes USER_APPROVAL_REQUESTED and checkpoints on WAITING.
+        """
+        self.event_bus.publish(
+            UserApprovalRequestedEvent(
+                request_id=request_id,
+                message=message,
+                source_process=self.process_id,
+                payload={
+                    "request_id": request_id,
+                    "message": message,
+                },
+            )
+        )
+        self.wait(ApprovalWaitCondition(request_id, self._state_store))

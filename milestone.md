@@ -2,7 +2,7 @@
 
 > Living tracker for kernel infrastructure milestones.
 >
-> **Last updated:** 2026-07-05
+> **Last updated:** 2026-07-05 (M13–M18 complete)
 >
 > **Sources:** [docs/003-system-model.md](docs/003-system-model.md) · [docs/001-principles.md](docs/001-principles.md) · [docs/building-applications.md](docs/building-applications.md)
 
@@ -25,6 +25,12 @@
 | M10 | ExecutionSpec + Tool Model   | Complete | M4         | P2, P13    |
 | M11 | Plugin Ecosystem             | Complete | M3, M10    | P16, P13   |
 | M12 | Cognitive Infrastructure     | Complete | M4, M11    | P1, P12    |
+| M13 | LLM Tool Provider            | Complete | M10        | P2, P13    |
+| M14 | Planner Plugin               | Complete | M11, M12   | P1, P2     |
+| M15 | Memory + RAG                 | Complete | M5, M13    | P5         |
+| M16 | Researcher / Evaluator       | Complete | M14, M15   | P1, P12    |
+| M17 | Human-in-the-loop            | Complete | M7, M16    | P11        |
+| M18 | Reference AI App             | Complete | M16, M17   | P1, P10    |
 
 
 ---
@@ -489,82 +495,95 @@ Tracked separately from current milestones:
 
 ## Future Cognitive / AI Milestones
 
-M1–M12 built the kernel. These milestones target **AI applications that run on EmergenceOS** without violating P2 (Kernel Never Thinks) or P7 (Deterministic Infrastructure).
+M1–M18 complete. The kernel and reference cognitive AI stack ship together.
 
-| ID  | Milestone              | Status  | Depends On | Goal |
-| --- | ---------------------- | ------- | ---------- | ---- |
-| M13 | LLM Tool Provider      | Planned | M10        | Register Ollama/OpenAI as budgeted tools; token accounting in `BudgetTracker` |
-| M14 | Planner Plugin         | Planned | M11, M12   | LLM process decomposes goals into `TaskSpec` lists; kernel only schedules |
-| M15 | Memory + RAG           | Planned | M5, M13    | Vector index over episodic/semantic memory; retrieval as a tool |
-| M16 | Researcher / Evaluator | Planned | M14, M15   | Multi-agent loop: plan → research → evaluate → reflect → replan |
-| M17 | Human-in-the-loop      | Planned | M7, M16    | `USER_APPROVAL_REQUESTED` events, interrupt/resume, approval gates |
-| M18 | Reference AI App       | Planned | M16, M17   | Research Assistant: goal-driven, long-running, observable end-to-end |
+| ID  | Milestone              | Status   | Depends On | Goal |
+| --- | ---------------------- | -------- | ---------- | ---- |
+| M13 | LLM Tool Provider      | Complete | M10        | Register Ollama/OpenAI as budgeted tools; token accounting in `BudgetTracker` |
+| M14 | Planner Plugin         | Complete | M11, M12   | LLM process decomposes goals into `TaskSpec` lists; kernel only schedules |
+| M15 | Memory + RAG           | Complete | M5, M13    | Vector index over episodic/semantic memory; retrieval as a tool |
+| M16 | Researcher / Evaluator | Complete | M14, M15   | Multi-agent loop: plan → research → evaluate → reflect → replan |
+| M17 | Human-in-the-loop      | Complete | M7, M16    | `USER_APPROVAL_REQUESTED` events, interrupt/resume, approval gates |
+| M18 | Reference AI App       | Complete | M16, M17   | Research Assistant: goal-driven, long-running, observable end-to-end |
 
 ### M13 — LLM Tool Provider
+
+**Status:** Complete
 
 **Goal:** Processes invoke LLMs through `context.tools`, never directly.
 
 **Deliverables:**
-- `llm.chat` tool with provider adapters (Ollama, OpenAI-compatible API)
-- Token consumption decrements `ResourceBudget`
-- Tool result events with `correlation_id` / `causation_id`
-- Integration test: plugin calls LLM tool, budget enforced
+- [x] `llm.chat` tool with provider adapters (Ollama, OpenAI-compatible API, mock)
+- [x] Token consumption decrements `ResourceBudget`
+- [x] Tool result events with `correlation_id` / `causation_id`
+- [x] Integration test: plugin calls LLM tool, budget enforced
 
 **Acceptance:** No `import openai` in process plugins; all LLM access via `ToolExecutor`.
 
 ### M14 — Planner Plugin
 
+**Status:** Complete
+
 **Goal:** Autonomous plan decomposition as a replaceable plugin process.
 
 **Deliverables:**
-- `plugins/planner/` invokes `llm.chat` to produce `TaskSpec` JSON
-- Kernel `create_plan_from_goal()` spawns planner, waits for plan artifact in memory
-- Planner is a normal long-running process (checkpoint + wait)
+- [x] `plugins/planner/` invokes `llm.chat` to produce `TaskSpec` JSON
+- [x] Kernel `create_plan_from_goal()` spawns planner, waits for plan artifact in state
+- [x] Planner is a normal process (checkpoint + wait capable)
+- [x] `python boot.py --plan "Research X"` produces a valid plan
 
 **Acceptance:** `python boot.py --plan "Research X"` produces a valid plan without kernel LLM imports.
 
 ### M15 — Memory + RAG
 
+**Status:** Complete
+
 **Goal:** Retrieval-augmented generation over kernel-managed memory.
 
 **Deliverables:**
-- Vector index adapter (in-memory first; Chroma optional)
-- `memory.search` tool with episodic + semantic scopes
-- Researcher plugin stores findings in episodic memory, retrieves context for prompts
+- [x] Vector index adapter (in-memory TF-IDF)
+- [x] `memory.search` tool with episodic + semantic scopes
+- [x] Researcher plugin stores findings in episodic memory, retrieves context for prompts
 
 **Acceptance:** Researcher recalls prior findings across process restarts via checkpoint + memory.
 
 ### M16 — Researcher / Evaluator Loop
 
+**Status:** Complete
+
 **Goal:** Reference multi-agent cognitive pipeline on the OS.
 
 **Deliverables:**
-- Researcher plugin: gather → store → respond
-- Evaluator plugin: score output, emit `EVALUATION_COMPLETED`
-- Coordinator reacts to evaluation, triggers replan or completion
-- Integration test mirrors `system_model_demo` but with LLM tools
+- [x] Researcher plugin: gather → store → respond
+- [x] Evaluator plugin: score output, emit `EVALUATION_COMPLETED`
+- [x] Coordinator reacts to evaluation, triggers replan or completion
+- [x] Integration test mirrors `system_model_demo` but with LLM tools
 
 **Acceptance:** Goal reaches `COMPLETED` or `FAILED` with full event audit trail.
 
 ### M17 — Human-in-the-loop
 
+**Status:** Complete
+
 **Goal:** Users can approve, redirect, or interrupt running cognitive workflows.
 
 **Deliverables:**
-- `USER_MESSAGE_RECEIVED`, `USER_APPROVAL_REQUESTED`, `USER_APPROVAL_GRANTED` events
-- Processes block on `wait_for_approval()` with checkpoint
-- CLI or HTTP ingress publishes user events to the bus
+- [x] `USER_MESSAGE_RECEIVED`, `USER_APPROVAL_REQUESTED`, `USER_APPROVAL_GRANTED` events
+- [x] Processes block on `wait_for_approval()` with checkpoint
+- [x] CLI ingress: `./eos approve <request_id>`
 
 **Acceptance:** Research Assistant pauses before external action; resumes after approval.
 
 ### M18 — Reference AI App: Research Assistant
 
+**Status:** Complete
+
 **Goal:** Ship a complete cognitive application demonstrating the full stack.
 
 **Deliverables:**
-- `plugins/research_assistant/` — goal intake, planning, research, evaluation, report
-- Long-running, checkpointed, observable via `./eos trace`
-- `python boot.py --research "topic"` end-to-end demo
+- [x] `plugins/research_assistant/` — goal intake, planning, research, evaluation, report
+- [x] Long-running, checkpointed, observable via `./eos trace`
+- [x] `python boot.py --research "topic"` end-to-end demo
 
 **Acceptance:** User provides a topic; system produces a report with traceable provenance.
 
@@ -577,6 +596,7 @@ M1–M12 built the kernel. These milestones target **AI applications that run on
 
 | Date       | Entry                                                                      |
 | ---------- | -------------------------------------------------------------------------- |
+| 2026-07-05 | **M13–M18 complete** — LLM tools, RAG, planner, researcher/evaluator, HITL, research assistant |
 | 2026-07-05 | **v0.1.0 release** — M1–M12, plugins, long-running services, 462 tests     |
 | 2026-07-05 | Long-running apps — heartbeat, collector, job_worker, orchestrator fleet   |
 | 2026-07-05 | M11 complete — plugin discovery, plugin.yaml manifests, hello_world plugin |

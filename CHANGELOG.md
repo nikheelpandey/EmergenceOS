@@ -5,6 +5,44 @@ All notable changes to EmergenceOS are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-05
+
+Cognitive AI milestones M13–M18: LLM tools, RAG memory search, LLM planner, researcher/evaluator plugins, human-in-the-loop approval, and the research assistant reference app.
+
+### Added
+
+#### LLM tools (M13)
+- `llm.chat` tool with Mock, Ollama, and OpenAI-compatible providers
+- Token and cost accounting in `ToolExecutor` / `BudgetTracker`
+- `tool.llm` capability gating separate from `tool.python`
+- Environment config: `EMERGENCE_LLM_PROVIDER`, `EMERGENCE_LLM_MODEL`, `EMERGENCE_LLM_BASE_URL`, `EMERGENCE_LLM_API_KEY`
+
+#### Memory + RAG (M15)
+- In-memory TF-IDF vector index (`emergence/memory/vector_index.py`)
+- `memory.search` tool scoped to episodic/semantic memory
+- Auto-indexing on episodic/semantic store operations
+
+#### Cognitive AI plugins (M14, M16, M18)
+- `plugins/planner/` — LLM-driven goal → TaskSpec decomposition
+- `plugins/researcher/` — LLM research with RAG context
+- `plugins/evaluator/` — LLM quality scoring, `EVALUATION_COMPLETED` events
+- `plugins/research_assistant/` — end-to-end research pipeline
+
+#### Human-in-the-loop (M17)
+- `USER_MESSAGE_RECEIVED`, `USER_APPROVAL_REQUESTED`, `USER_APPROVAL_GRANTED` events
+- `ProcessContext.wait_for_approval()` with auto-checkpoint
+- `Kernel.grant_user_approval()` and `./eos approve <request_id>`
+
+#### Kernel API
+- `create_plan_from_goal()`, `spawn_planner_for_goal()`, `finalize_plan_from_planner()`
+- Boot modes: `--plan "topic"`, `--research "topic"`
+
+#### Tests
+- 483 tests (21 new for M13–M18)
+
+### Fixed
+- `create_kernel_context()` no longer discards empty `Executor` instances (falsy `__len__` bug)
+
 ## [0.1.0] - 2026-07-05
 
 First public release. EmergenceOS ships a working kernel, plugin ecosystem, cognitive orchestration primitives, and reference applications demonstrating long-running multi-process coordination.
@@ -72,4 +110,5 @@ First public release. EmergenceOS ships a working kernel, plugin ecosystem, cogn
 - `docs/building-applications.md` — guide for custom plugins and apps
 - Updated `readme.md` for v0.1
 
+[0.2.0]: https://github.com/nikheelpandey/EmergenceOS/releases/tag/v0.2.0
 [0.1.0]: https://github.com/nikheelpandey/EmergenceOS/releases/tag/v0.1.0

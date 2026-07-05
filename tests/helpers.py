@@ -11,6 +11,7 @@ from emergence.core.process_context import ProcessContext
 from emergence.core.process_definition import ProcessDefinition
 from emergence.events.event_bus import EventBus
 from emergence.executor.tool_executor import ToolExecutor, ToolRegistry
+from emergence.tools.registry_setup import register_kernel_tools
 from emergence.kernel.mailbox_manager import MailboxManager
 from emergence.kernel.process_table import ProcessTable
 from emergence.kernel.state_store import StateStore
@@ -45,7 +46,9 @@ def build_test_process_context(
     budgets = BudgetTracker()
     memory = MemoryManager(MemoryStore(), bus)
     checkpoints = CheckpointManager.in_memory(bus, memory, budgets)
-    tools = ToolExecutor(ToolRegistry(), bus, security, budgets)
+    registry = ToolRegistry()
+    register_kernel_tools(registry, memory=memory)
+    tools = ToolExecutor(registry, bus, security, budgets)
     process_table = ProcessTable()
 
     pid = process_id or ProcessID.new()
@@ -70,4 +73,5 @@ def build_test_process_context(
         ),
         tools=GatedToolAccess(tools, security, pid),
         _mailbox_manager=mailboxes,
+        _state_store=state,
     )

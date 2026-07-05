@@ -43,7 +43,8 @@ def run(context: ProcessContext) -> str:
 
     context.checkpoints.create()
 
-    if beat >= int(context.state.get("max_beats", 100)):
+    max_beats = int(context.state.get("max_beats", 100))
+    if max_beats > 0 and beat >= max_beats:
         context.state.set("heartbeat_status", "max_beats_reached")
         return "heartbeat_finished"
 

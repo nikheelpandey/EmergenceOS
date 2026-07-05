@@ -3,7 +3,7 @@ from __future__ import annotations
 from emergence.core.ids import ProcessID
 from emergence.executor.tool_executor import ToolExecutor
 from emergence.executor.tool_model import ToolRequest, ToolResult
-from emergence.security.capabilities import TOOL_PYTHON
+from emergence.executor.tool_executor import capability_for_tool
 from emergence.security.security_manager import SecurityManager
 
 
@@ -30,7 +30,7 @@ class GatedToolAccess:
     ) -> ToolResult:
         self._security.require(
             self._pid,
-            TOOL_PYTHON,
+            capability_for_tool(tool_name),
             operation=f"tools.invoke('{tool_name}')",
         )
         request = ToolRequest(
