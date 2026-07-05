@@ -12,6 +12,8 @@ Use --once for batch demos that drain and exit.
 import sys
 
 from emergence.cognitive.manager import TaskSpec
+from emergence.cognitive.goal_registry import GoalKind
+from emergence.apps.research_output import format_research_output
 from emergence.kernel.boot_context import (
     build_kernel,
     build_long_running_services,
@@ -87,7 +89,7 @@ def main() -> None:
             kernel, goal_obj, plan_obj = build_plan_demo(plan_topic)
             kernel.execute_plan(plan_obj.plan_id)
         elif research_topic:
-            kernel = build_research_assistant(research_topic)
+            kernel, goal_obj = build_research_assistant(research_topic)
         elif hello:
             kernel = build_kernel(spawn="hello_world")
         else:
@@ -104,8 +106,13 @@ def main() -> None:
         elif research_topic:
             kernel.context.state.set("research_topic", research_topic)
             kernel.context.state.set("auto_approve", True)
+            goal_obj = kernel.create_goal(
+                f"Research: {research_topic}",
+                kind=GoalKind.PERSISTENT,
+            )
             kernel.spawn(
                 kernel.context.registry.get("research_assistant"),
+                goal_id=goal_obj.goal_id,
                 priority=8,
             )
         elif goal:
@@ -131,6 +138,10 @@ def main() -> None:
             print("Interactive shell ready — type 'help'.\n")
 
         kernel.run_forever()
+
+    if research_topic:
+        print(format_research_output(kernel))
+        print()
 
     print()
     print("=" * 60)

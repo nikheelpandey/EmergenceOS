@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -56,6 +57,26 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
+def _extract_topic(prompt: str) -> str | None:
+    """Pull the research subject from common prompt patterns."""
+    quoted = re.search(r"'([^']+)'", prompt)
+    if quoted:
+        return quoted.group(1).strip()
+
+    for pattern in (
+        r"research thoroughly:\s*(.+?)(?:\n|$)",
+        r"research (?:the )?topic (?:of )?(.+?)(?:\n|$)",
+        r"report on\s+(.+?)(?:\s+from|\n|$)",
+    ):
+        match = re.search(pattern, prompt, re.IGNORECASE)
+        if match:
+            topic = match.group(1).strip().rstrip(".")
+            if topic:
+                return topic
+
+    return None
+
+
 class MockLLMProvider:
     """
     Deterministic LLM for tests and offline demos.
@@ -82,6 +103,7 @@ class MockLLMProvider:
 
     def _respond(self, prompt: str) -> str:
         lower = prompt.lower()
+        topic = _extract_topic(prompt)
 
         if "task" in lower and ("json" in lower or "decompose" in lower or "plan" in lower):
             return json.dumps([
@@ -90,7 +112,11 @@ class MockLLMProvider:
                     "process_definition_name": "researcher",
                     "dependencies": [],
                     "priority": 5,
-                    "expected_output": "Research findings on the topic",
+                    "expected_output": (
+                        f"Research findings on {topic}"
+                        if topic
+                        else "Research findings on the topic"
+                    ),
                 },
                 {
                     "name": "evaluate",
@@ -109,29 +135,41 @@ class MockLLMProvider:
             ])
 
         if "evaluate" in lower or "score" in lower:
+            subject = topic or "the research"
             return json.dumps({
                 "score": 8,
-                "feedback": "Thorough research with good coverage of key topics.",
+                "feedback": (
+                    f"Thorough research with good coverage of {subject}."
+                ),
                 "approved": True,
             })
 
         if "report" in lower or "summarize" in lower or "synthesize" in lower:
+            title = topic or "the requested topic"
             return (
-                "# Research Report\n\n"
-                "This report covers the requested topic with findings drawn "
-                "from episodic memory and LLM synthesis.\n\n"
-                "## Key Findings\n"
-                "- Event-driven process architecture enables observable coordination\n"
-                "- Capability-based security enforces least privilege\n"
-                "- Checkpointing supports long-running cognitive workflows\n"
+                f"# Research Report: {title}\n\n"
+                f"This report synthesizes findings on **{title}**.\n\n"
+                f"## Overview\n"
+                f"- Background and historical context of {title}\n"
+                f"- Major contributions, influence, and legacy\n"
+                f"- Key themes relevant to the research goal\n\n"
+                f"## Summary\n"
+                f"Research on {title} completed using episodic memory "
+                f"and LLM synthesis. Configure a real LLM provider "
+                f"(`EMERGENCE_LLM_PROVIDER=ollama` or `openai`) for "
+                f"detailed, factual output.\n"
             )
 
         if "research" in lower or "investigate" in lower or "topic" in lower:
+            subject = topic or "the requested topic"
             return (
-                "Research findings: EmergenceOS uses event-driven processes "
-                "with capability-gated kernel services. Processes communicate "
-                "via mailboxes mediated by events, never through direct calls. "
-                "Memory is managed centrally with episodic and semantic categories."
+                f"Research findings on {subject}:\n"
+                f"- Historical background and defining characteristics\n"
+                f"- Major events, ideas, or contributions associated with "
+                f"{subject}\n"
+                f"- Lasting impact and contemporary relevance\n"
+                f"\n(Using mock LLM — set EMERGENCE_LLM_PROVIDER for "
+                f"real research.)"
             )
 
         return f"Mock LLM response to: {prompt[:120]}"

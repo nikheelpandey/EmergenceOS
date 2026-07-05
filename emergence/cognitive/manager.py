@@ -247,6 +247,120 @@ class CognitiveManager:
     def get_task(self, task_id: TaskID) -> Task:
         return self._get_task(task_id)
 
+    def snapshot(self) -> dict[str, object]:
+        """Serialize goals, plans, and tasks for durable storage."""
+        return {
+            "goals": [
+                {
+                    "goal_id": str(goal.goal_id),
+                    "description": goal.description,
+                    "state": goal.state.value,
+                    "created_at": goal.created_at.isoformat(),
+                }
+                for goal in self._goals.values()
+            ],
+            "plans": [
+                {
+                    "plan_id": str(plan.plan_id),
+                    "goal_id": str(plan.goal_id),
+                    "state": plan.state.value,
+                    "constraints": plan.constraints,
+                    "priority": plan.priority,
+                    "created_at": plan.created_at.isoformat(),
+                }
+                for plan in self._plans.values()
+            ],
+            "tasks": [
+                {
+                    "task_id": str(task.task_id),
+                    "plan_id": str(task.plan_id),
+                    "name": task.name,
+                    "process_definition_name": task.process_definition_name,
+                    "state": task.state.value,
+                    "dependencies": [str(dep) for dep in task.dependencies],
+                    "assigned_process_id": (
+                        str(task.assigned_process_id)
+                        if task.assigned_process_id is not None
+                        else None
+                    ),
+                    "expected_output": task.expected_output,
+                    "priority": task.priority,
+                    "metadata": task.metadata,
+                    "created_at": task.created_at.isoformat(),
+                }
+                for task in self._tasks.values()
+            ],
+            "tasks_by_plan": self._tasks_by_plan,
+            "task_name_index": self._task_name_index,
+        }
+
+    def restore(self, data: dict[str, object]) -> None:
+        """Restore goals, plans, and tasks from durable storage."""
+        from datetime import datetime
+
+        self._goals.clear()
+        self._plans.clear()
+        self._tasks.clear()
+        self._tasks_by_plan.clear()
+        self._task_name_index.clear()
+
+        for raw in data.get("goals", []):
+            goal = Goal(
+                description=str(raw["description"]),
+                goal_id=GoalID(str(raw["goal_id"])),
+                state=GoalState(str(raw["state"])),
+                created_at=datetime.fromisoformat(str(raw["created_at"])),
+            )
+            self._goals[str(goal.goal_id)] = goal
+
+        for raw in data.get("plans", []):
+            plan = Plan(
+                goal_id=GoalID(str(raw["goal_id"])),
+                plan_id=PlanID(str(raw["plan_id"])),
+                state=PlanState(str(raw["state"])),
+                constraints=dict(raw.get("constraints", {})),  # type: ignore[arg-type]
+                priority=int(raw.get("priority", 0)),  # type: ignore[arg-type]
+                created_at=datetime.fromisoformat(str(raw["created_at"])),
+            )
+            self._plans[str(plan.plan_id)] = plan
+
+        for raw in data.get("tasks", []):
+            assigned = raw.get("assigned_process_id")
+            task = Task(
+                plan_id=PlanID(str(raw["plan_id"])),
+                name=str(raw["name"]),
+                process_definition_name=str(raw["process_definition_name"]),
+                task_id=TaskID(str(raw["task_id"])),
+                state=TaskState(str(raw["state"])),
+                dependencies=tuple(
+                    TaskID(str(dep)) for dep in raw.get("dependencies", [])
+                ),
+                assigned_process_id=(
+                    ProcessID(str(assigned)) if assigned is not None else None
+                ),
+                expected_output=str(raw.get("expected_output", "")),
+                priority=int(raw.get("priority", 0)),  # type: ignore[arg-type]
+                metadata=dict(raw.get("metadata", {})),  # type: ignore[arg-type]
+                created_at=datetime.fromisoformat(str(raw["created_at"])),
+            )
+            self._tasks[str(task.task_id)] = task
+
+        self._tasks_by_plan = {
+            str(plan_id): [str(task_id) for task_id in task_ids]
+            for plan_id, task_ids in dict(
+                data.get("tasks_by_plan", {})
+            ).items()
+        }
+        self._task_name_index = {
+            str(plan_id): {
+                str(name): str(task_id)
+                for name, task_id in names.items()
+            }
+            for plan_id, names in dict(
+                data.get("task_name_index", {})
+            ).items()
+        }
+
     def _update_ready_tasks(self, plan_id: str) -> None:
         for tid in self._tasks_by_plan.get(plan_id, []):
             task = self._tasks[tid]

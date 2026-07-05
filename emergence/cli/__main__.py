@@ -9,6 +9,7 @@ Usage
     python -m emergence.cli state
 
 Add --demo to inspect a sample kernel with mixed process states.
+Live commands connect to a running ./eos serve instance.
 """
 
 from __future__ import annotations
@@ -17,8 +18,11 @@ import argparse
 import sys
 import time
 
+from emergence.admin.client import AdminClient, AdminConnectionError
+from emergence.admin.snapshot_api import system_snapshot_from_admin
 from emergence.kernel.kernel import Kernel
 from emergence.kernel.boot_context import build_kernel
+from emergence.kernel.runtime import RuntimeService
 from emergence.observability.demo import build_demo_kernel
 from emergence.observability.display import (
     format_process_table,
@@ -28,6 +32,21 @@ from emergence.observability.display import (
     format_top_screen,
 )
 from emergence.observability.snapshot import capture_system_snapshot
+
+
+def format_budget_view_from_admin(data: dict) -> str:
+    lines = ["BUDGET USAGE", "─" * 40]
+    for item in data.get("budgets", []):
+        lines.append(
+            f"  {item['name']:<16} "
+            f"tokens={item['tokens']} "
+            f"tools={item['tool_invocations']} "
+            f"time={item['execution_seconds']:.2f}s "
+            f"retries={item['retries']}"
+        )
+    if len(lines) == 2:
+        lines.append("  (no processes)")
+    return "\n".join(lines)
 
 
 def format_budget_view(kernel: Kernel) -> str:
@@ -43,6 +62,21 @@ def format_budget_view(kernel: Kernel) -> str:
         )
     if len(lines) == 2:
         lines.append("  (no processes)")
+    return "\n".join(lines)
+
+
+def format_trace_view_from_admin(data: dict) -> str:
+    correlation_id = data.get("correlation_id", "")
+    lines = [f"TRACE {correlation_id}", "─" * 40]
+    events = data.get("events", [])
+    for event in events:
+        lines.append(
+            f"  {event['timestamp']} "
+            f"{event['event_type']} "
+            f"pid={event.get('source_process')}"
+        )
+    if len(lines) == 2:
+        lines.append("  (no events)")
     return "\n".join(lines)
 
 
@@ -64,6 +98,18 @@ def format_trace_view(kernel: Kernel, correlation_id: str) -> str:
     return "\n".join(lines)
 
 
+def format_metrics_view_from_admin(data: dict) -> str:
+    metrics = data.get("metrics", {})
+    lines = ["METRICS", "─" * 40]
+    lines.append(f"  events:     {metrics.get('event_throughput', 0)}")
+    lines.append(f"  queue:      {metrics.get('scheduler_depth', 0)}")
+    lines.append(f"  waiting:    {metrics.get('waiting_count', 0)}")
+    lines.append(f"  tokens:     {metrics.get('token_consumption', 0)}")
+    for state, count in sorted(metrics.get("process_count_by_state", {}).items()):
+        lines.append(f"  {state}: {count}")
+    return "\n".join(lines)
+
+
 def format_metrics_view(kernel: Kernel) -> str:
     metrics = kernel.context.observability.metrics.collect(kernel)
     lines = ["METRICS", "─" * 40]
@@ -75,6 +121,7 @@ def format_metrics_view(kernel: Kernel) -> str:
         lines.append(f"  {state}: {count}")
     return "\n".join(lines)
 
+
 _CLEAR_SCREEN = "\033[2J\033[H"
 
 
@@ -84,10 +131,27 @@ def _resolve_kernel(args: argparse.Namespace) -> Kernel:
     return build_kernel(spawn=None)
 
 
-def cmd_ps(args: argparse.Namespace) -> int:
-    kernel = _resolve_kernel(args)
-    snapshot = capture_system_snapshot(kernel)
+def _fetch_admin_snapshot(args: argparse.Namespace) -> dict:
+    if args.demo:
+        kernel = build_demo_kernel()
+        from emergence.admin.snapshot_api import build_admin_snapshot
 
+        return build_admin_snapshot(kernel)
+    return AdminClient.connect().snapshot()
+
+
+def _handle_admin_error(exc: AdminConnectionError) -> int:
+    print(str(exc), file=sys.stderr)
+    return 1
+
+
+def cmd_ps(args: argparse.Namespace) -> int:
+    try:
+        admin_data = _fetch_admin_snapshot(args)
+    except AdminConnectionError as exc:
+        return _handle_admin_error(exc)
+
+    snapshot = system_snapshot_from_admin(admin_data)
     print(format_system_header(snapshot))
     print()
     print(format_process_table(snapshot, wide=args.wide))
@@ -95,11 +159,10 @@ def cmd_ps(args: argparse.Namespace) -> int:
 
 
 def cmd_top(args: argparse.Namespace) -> int:
-    kernel = _resolve_kernel(args)
-
     try:
         while True:
-            snapshot = capture_system_snapshot(kernel)
+            admin_data = _fetch_admin_snapshot(args)
+            snapshot = system_snapshot_from_admin(admin_data)
             if sys.stdout.isatty():
                 sys.stdout.write(_CLEAR_SCREEN)
             print(format_top_screen(snapshot, wide=args.wide))
@@ -108,6 +171,8 @@ def cmd_top(args: argparse.Namespace) -> int:
             if sys.stdout.isatty():
                 print("\nPress Ctrl+C to quit")
             time.sleep(args.interval)
+    except AdminConnectionError as exc:
+        return _handle_admin_error(exc)
     except KeyboardInterrupt:
         if sys.stdout.isatty():
             print()
@@ -116,9 +181,12 @@ def cmd_top(args: argparse.Namespace) -> int:
 
 
 def cmd_sched(args: argparse.Namespace) -> int:
-    kernel = _resolve_kernel(args)
-    snapshot = capture_system_snapshot(kernel)
+    try:
+        admin_data = _fetch_admin_snapshot(args)
+    except AdminConnectionError as exc:
+        return _handle_admin_error(exc)
 
+    snapshot = system_snapshot_from_admin(admin_data)
     print(format_system_header(snapshot))
     print()
     print(format_scheduler_view(snapshot))
@@ -126,10 +194,13 @@ def cmd_sched(args: argparse.Namespace) -> int:
 
 
 def cmd_state(args: argparse.Namespace) -> int:
-    kernel = _resolve_kernel(args)
-    snapshot = capture_system_snapshot(kernel)
-    state = kernel.context.state.snapshot()
+    try:
+        admin_data = _fetch_admin_snapshot(args)
+    except AdminConnectionError as exc:
+        return _handle_admin_error(exc)
 
+    snapshot = system_snapshot_from_admin(admin_data)
+    state = admin_data.get("state", {})
     print(format_system_header(snapshot))
     print()
     print(format_state_view(snapshot, state))
@@ -137,49 +208,80 @@ def cmd_state(args: argparse.Namespace) -> int:
 
 
 def cmd_budget(args: argparse.Namespace) -> int:
-    kernel = _resolve_kernel(args)
-    snapshot = capture_system_snapshot(kernel)
+    try:
+        admin_data = _fetch_admin_snapshot(args)
+    except AdminConnectionError as exc:
+        return _handle_admin_error(exc)
+
+    snapshot = system_snapshot_from_admin(admin_data)
     print(format_system_header(snapshot))
     print()
-    print(format_budget_view(kernel))
+    print(format_budget_view_from_admin(admin_data))
     return 0
 
 
 def cmd_trace(args: argparse.Namespace) -> int:
-    kernel = _resolve_kernel(args)
-    print(format_trace_view(kernel, args.correlation_id))
+    try:
+        if args.demo:
+            kernel = build_demo_kernel()
+            print(format_trace_view(kernel, args.correlation_id))
+        else:
+            data = AdminClient.connect().trace(args.correlation_id)
+            print(format_trace_view_from_admin(data))
+    except AdminConnectionError as exc:
+        return _handle_admin_error(exc)
     return 0
 
 
 def cmd_metrics(args: argparse.Namespace) -> int:
-    kernel = _resolve_kernel(args)
-    snapshot = capture_system_snapshot(kernel)
+    try:
+        admin_data = _fetch_admin_snapshot(args)
+    except AdminConnectionError as exc:
+        return _handle_admin_error(exc)
+
+    snapshot = system_snapshot_from_admin(admin_data)
     print(format_system_header(snapshot))
     print()
-    print(format_metrics_view(kernel))
+    print(format_metrics_view_from_admin(admin_data))
     return 0
 
 
 def cmd_approve(args: argparse.Namespace) -> int:
-    kernel = _resolve_kernel(args)
-    kernel.grant_user_approval(args.request_id)
-    print(f"Approval granted for request {args.request_id}")
+    try:
+        if args.demo:
+            kernel = _resolve_kernel(args)
+            kernel.grant_user_approval(args.request_id)
+        else:
+            AdminClient.connect().approve(args.request_id)
+        print(f"Approval granted for request {args.request_id}")
+    except AdminConnectionError as exc:
+        return _handle_admin_error(exc)
     return 0
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
     from emergence.kernel.ingress import KernelIngress
-    from emergence.kernel.runtime import build_runtime
 
-    kernel = build_runtime()
+    try:
+        service = RuntimeService.start()
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    kernel = service.kernel
     print("EmergenceOS persistent runtime started.")
     print("Platform services: heartbeat, event_collector, job_worker")
+    print(f"Admin API: {service.admin.host}:{service.admin.port}")
+    print(f"HTTP API:  {service.http.base_url()}")
     print("Ctrl+C to shutdown.\n")
 
     if sys.stdin.isatty() and not args.no_repl:
         KernelIngress(kernel).run_repl_async()
 
-    kernel.run_forever()
+    try:
+        kernel.run_forever()
+    finally:
+        service.stop()
     return 0
 
 

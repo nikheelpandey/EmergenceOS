@@ -90,7 +90,8 @@ class TestRunForever:
 
 
 class TestBuildRuntime:
-    def test_spawns_platform_services(self):
+    def test_spawns_platform_services(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("EMERGENCE_DATA_DIR", str(tmp_path / "runtime"))
         kernel = build_runtime()
         names = {
             p.definition.name

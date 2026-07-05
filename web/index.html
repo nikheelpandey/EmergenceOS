@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EmergenceOS — Goal Inbox</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <header class="brand">
+        <h1>EmergenceOS</h1>
+        <p class="tagline">Goals, not chat threads</p>
+      </header>
+
+      <section class="panel">
+        <h2>Spaces</h2>
+        <ul id="space-list" class="space-list"></ul>
+        <form id="new-space-form" class="inline-form">
+          <input type="text" id="new-space-name" placeholder="New space…" required>
+          <button type="submit">Add</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Submit goal</h2>
+        <form id="new-goal-form">
+          <textarea id="goal-description" rows="3" placeholder="Research quantum computing…" required></textarea>
+          <select id="goal-mode">
+            <option value="research">Research assistant</option>
+            <option value="goal">Goal only</option>
+            <option value="worker">Worker demo</option>
+          </select>
+          <button type="submit">Create goal</button>
+        </form>
+      </section>
+
+      <nav class="panel">
+        <button id="view-monitor" class="nav-btn">Activity Monitor</button>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <section id="empty-state" class="empty-state">
+        <h2>Your operating system for goals</h2>
+        <p>Create a goal on the left. EmergenceOS runs processes in the background — you watch health, knowledge, and timeline instead of chatting.</p>
+      </section>
+
+      <section id="goal-list-view" class="hidden">
+        <header class="content-header">
+          <h2>Goals</h2>
+          <span id="goal-count" class="badge"></span>
+        </header>
+        <div id="goal-cards" class="goal-cards"></div>
+      </section>
+
+      <section id="goal-detail-view" class="hidden">
+        <header class="content-header">
+          <button id="back-to-list" class="link-btn">← Goals</button>
+          <h2 id="detail-title"></h2>
+          <span id="detail-health" class="health-pill"></span>
+        </header>
+
+        <div class="detail-grid">
+          <article class="card">
+            <h3>Overview</h3>
+            <p id="detail-overview"></p>
+            <div id="detail-stats" class="stats-row"></div>
+          </article>
+
+          <article class="card">
+            <h3>Processes</h3>
+            <div id="detail-processes" class="process-list"></div>
+          </article>
+
+          <article class="card wide">
+            <h3>Results</h3>
+            <div id="detail-results" class="results-panel">
+              <p class="muted">No report yet — research may still be running.</p>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3>Knowledge</h3>
+            <div id="detail-knowledge"></div>
+          </article>
+
+          <article class="card wide">
+            <h3>Timeline</h3>
+            <div id="detail-timeline" class="timeline"></div>
+          </article>
+
+          <article class="card wide hidden" id="inspector-card">
+            <h3>Event inspector</h3>
+            <pre id="inspector-output"></pre>
+          </article>
+        </div>
+      </section>
+
+      <section id="monitor-view" class="hidden">
+        <header class="content-header">
+          <button id="back-from-monitor" class="link-btn">← Goals</button>
+          <h2>Activity Monitor</h2>
+        </header>
+        <div id="monitor-processes" class="process-list"></div>
+      </section>
+
+      <section id="approvals-bar" class="approvals-bar hidden">
+        <h3>Approvals needed</h3>
+        <div id="approval-cards"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

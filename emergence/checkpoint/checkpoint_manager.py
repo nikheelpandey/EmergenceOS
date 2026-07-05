@@ -125,3 +125,8 @@ class CheckpointManager:
         process_id: ProcessID,
     ) -> Checkpoint | None:
         return self._store.latest_for_process(str(process_id))
+
+    def close(self) -> None:
+        close = getattr(self._store, "close", None)
+        if callable(close):
+            close()

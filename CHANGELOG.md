@@ -5,6 +5,75 @@ All notable changes to EmergenceOS are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-05
+
+UX foundation and first product surface (M19–M29): live control plane, durable persistence, goal registry, knowledge layer, narrative timeline, event inspector, HTTP ingress, Goal Inbox web UI, spaces, scheduled work, and channel ingress.
+
+### Added
+
+#### Live control plane (M19)
+- Admin TCP API on `127.0.0.1:<port>` via `RuntimeService` / `./eos serve`
+- `./eos ps`, `top`, `sched`, `state`, `budget`, `trace`, `approve` connect to live kernel
+- Runtime lock (`runtime.json` + PID file) — single instance per data directory
+
+#### Durable persistence (M20)
+- `JsonlEventStore`, SQLite checkpoints, file-backed memory
+- Cognitive state, goal registry, knowledge index, spaces, and schedules persist across restart
+- `EMERGENCE_DATA_DIR` (default `~/.emergence/`)
+
+#### Goal registry (M21)
+- `GoalRegistry` — durable goals with computed health (healthy/degraded/needs_attention/idle)
+- Goal ↔ process association, one-shot vs persistent kinds
+- Admin API: `goals`, `goal.get`
+
+#### Knowledge layer (M22)
+- `KnowledgeIndex` — artifacts from `MEMORY_STORED` events (findings, reports, docs, …)
+- Provenance chain, size accounting, goal card summaries
+- Admin API: `knowledge.list`, `knowledge.get`
+
+#### Timeline & narrative (M23)
+- Deterministic event → human-language translation (`emergence/events/narrative.py`)
+- Day-grouped timeline (Today / Yesterday / Tomorrow)
+- Admin API: `goal.timeline`, `timeline.list`
+
+#### Event inspector (M24)
+- Structured inspector payload: why, plugin, capabilities, duration, correlation chain
+- Admin API: `event.inspect` · HTTP: `GET /events/{id}/inspect`
+
+#### HTTP ingress (M25)
+- REST API on `http://127.0.0.1:8765` (`EMERGENCE_HTTP_PORT`)
+- Goals, timeline, knowledge, results, approvals, system snapshot
+- WebSocket + SSE event streams per goal
+- Optional auth: `EMERGENCE_API_TOKEN`
+
+#### Goal Inbox web UI (M26)
+- `web/` — goal list, detail, Results panel, knowledge previews, timeline drill-down, approvals
+- Served at `/` when `./eos serve` is running
+
+#### Spaces (M27)
+- `SpaceRegistry` — isolated namespaces for goals, knowledge, and memory
+- Memory keys scoped as `space:category:pid:key`
+- HTTP: `GET/POST /spaces`, `POST /spaces/{id}/switch`
+
+#### Scheduled work (M28)
+- `ScheduleManager` — one-shot future wakeups tied to goals
+- Timeline shows scheduled future entries; fires processes on due time
+
+#### Channel ingress (M29)
+- Webhook adapter: `POST /channels/webhook` → goal + tracking URL
+
+#### Ollama integration
+- `EMERGENCE_LLM_PROVIDER=ollama` + `EMERGENCE_LLM_MODEL=qwen2.5:7b` for real research output
+- Topic-aware mock LLM fallback; `research_output.py` formats reports
+
+### Fixed
+- Knowledge API and web UI now return full artifact **content** (not just metadata)
+- `reconcile_from_memory()` indexes reports missing from knowledge index after restart
+- Legacy memory key format backward compatibility (`category:pid:key` and `space:category:pid:key`)
+
+### Tests
+- 560+ tests (unit + integration for admin, persistence, goals, knowledge, timeline, HTTP, spaces, schedules)
+
 ## [0.2.0] - 2026-07-05
 
 Cognitive AI milestones M13–M18: LLM tools, RAG memory search, LLM planner, researcher/evaluator plugins, human-in-the-loop approval, and the research assistant reference app.
@@ -78,37 +147,16 @@ First public release. EmergenceOS ships a working kernel, plugin ecosystem, cogn
 - CLI: `./eos ps`, `top`, `sched`, `state`, `budget`, `metrics`, `trace`
 
 #### Plugins
-- Plugin discovery from `/plugins` with `plugin.yaml` manifests
-- `PluginManager` load/unload lifecycle with `PLUGIN_LOADED` / `PLUGIN_UNLOADED` events
-- Reference plugins: `hello_world`, `planner`, `worker`, `heartbeat`, `event_collector`, `job_worker`, `orchestrator`
+- Auto-discovery from `plugins/` via `plugin.yaml` manifests
+- Reference plugins: `hello_world`, `heartbeat`, `job_worker`, `orchestrator`, `event_collector`
 
-#### Cognitive infrastructure
+#### Cognitive infrastructure (M12)
 - `Goal`, `Plan`, `Task` models and `CognitiveManager`
-- Kernel APIs: `create_goal`, `create_plan`, `execute_plan`
-- Task dependency graph feeds the scheduler
-
-#### Applications & demos
-- `boot.py` modes: default, `--demo`, `--goal`, `--services`
-- System-model simulation (coordinator / researcher / evaluator)
-- Long-running service fleet with multi-phase orchestration
-- Shared helpers in `emergence/apps/long_running_runtime.py`
+- `kernel.create_goal()`, `create_plan()`, `execute_plan()`
 
 #### Tests
-- 462 tests (unit + integration) with pytest and coverage reporting
+- 462 tests at v0.1.0 tag
 
-### Changed
-- `hello_world` migrated to plugin layout
-- Kernel delegates lifecycle, security, and composition to dedicated subsystems
-- `Request` unified with `Message` hierarchy (`kw_only` dataclasses)
-
-### Removed
-- Legacy monolithic capability/checkpoint modules under `emergence/core/`
-- `emergence/scheduler/policies.py` (replaced by integrated scheduler)
-
-### Documentation
-- `milestone.md` — M1–M12 complete tracker
-- `docs/building-applications.md` — guide for custom plugins and apps
-- Updated `readme.md` for v0.1
-
-[0.2.0]: https://github.com/nikheelpandey/EmergenceOS/releases/tag/v0.2.0
+[0.3.0]: https://github.com/nikheelpandey/EmergenceOS/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/nikheelpandey/EmergenceOS/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nikheelpandey/EmergenceOS/releases/tag/v0.1.0

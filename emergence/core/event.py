@@ -59,6 +59,8 @@ class EventType(str, Enum):
     GOAL_COMPLETED = "goal.completed"
     GOAL_FAILED = "goal.failed"
     GOAL_CANCELLED = "goal.cancelled"
+    GOAL_HEALTH_CHANGED = "goal.health_changed"
+    GOAL_STATS_UPDATED = "goal.stats_updated"
 
     # ------------------------------------------------------------------
     # Plan Events

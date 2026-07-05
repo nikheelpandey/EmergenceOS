@@ -8,7 +8,12 @@ explicitly shut down (Ctrl+C / SIGTERM).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from emergence.admin.runtime_lock import RuntimeLock
+from emergence.admin.server import AdminServer
 from emergence.core.event import Event, EventType
+from emergence.ingress.http.server import HttpIngressServer, default_http_port
 from emergence.kernel.boot_context import build_kernel
 from emergence.kernel.kernel import Kernel
 
@@ -21,7 +26,10 @@ PLATFORM_SERVICES: tuple[str, ...] = (
 )
 
 
-def build_runtime() -> Kernel:
+from emergence.persistence.flush import flush_persistence
+
+
+def build_runtime(*, persist: bool = True) -> Kernel:
     """
     Boot the full EmergenceOS runtime.
 
@@ -34,6 +42,7 @@ def build_runtime() -> Kernel:
         spawn=None,
         load_plugins=True,
         enable_supervisor=True,
+        persist=persist,
     )
     ctx = kernel.context
 
@@ -69,3 +78,38 @@ def build_runtime() -> Kernel:
     )
 
     return kernel
+
+
+@dataclass
+class RuntimeService:
+    """
+    Persistent runtime with admin control plane and runtime lock.
+    """
+
+    kernel: Kernel
+    admin: AdminServer
+    http: HttpIngressServer
+    lock: RuntimeLock
+
+    @classmethod
+    def start(cls) -> RuntimeService:
+        lock = RuntimeLock.create()
+        lock.acquire()
+        kernel = build_runtime(persist=True)
+        admin = AdminServer(kernel)
+        admin.start()
+        http = HttpIngressServer(kernel, port=default_http_port())
+        http.start()
+        lock.publish_manifest(
+            host=admin.host,
+            port=admin.port,
+            http_port=http.port,
+        )
+        return cls(kernel=kernel, admin=admin, http=http, lock=lock)
+
+    def stop(self) -> None:
+        flush_persistence(self.kernel.context)
+        self.http.stop()
+        self.admin.stop()
+        self.lock.release()
+        self.kernel.shutdown()

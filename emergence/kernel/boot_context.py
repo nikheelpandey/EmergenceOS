@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from emergence.checkpoint.checkpoint_manager import CheckpointManager
+from emergence.cognitive.goal_registry import GoalKind, GoalRegistry
 from emergence.cognitive.manager import CognitiveManager
 from emergence.core.budget import ResourceBudget
 from emergence.core.budget_tracker import BudgetTracker
@@ -20,13 +21,16 @@ from emergence.kernel.process_table import ProcessTable
 from emergence.kernel.registry import ProcessRegistry
 from emergence.kernel.state_store import StateStore
 from emergence.kernel.supervisor import Supervisor
+from emergence.memory.knowledge_index import create_knowledge_index
 from emergence.memory.memory_manager import MemoryManager
 from emergence.memory.memory_store import MemoryStore
 from emergence.observability.kernel import ObservabilityKernel
 from emergence.plugins.manager import PluginManager
+from emergence.scheduler.schedule_manager import ScheduleManager
 from emergence.scheduler.scheduler import Scheduler
 from emergence.security.capability_manager import CapabilityManager
 from emergence.security.security_manager import SecurityManager
+from emergence.spaces.registry import SpaceRegistry
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PLUGINS_ROOT = PROJECT_ROOT / "plugins"
@@ -36,6 +40,7 @@ def create_kernel_context(
     executor: Executor | None = None,
     *,
     llm_provider: Any | None = None,
+    persist: bool = False,
 ) -> KernelContext:
     """
     Construct and wire together every core kernel service.
@@ -44,8 +49,25 @@ def create_kernel_context(
     that forms part of the kernel is instantiated here and
     injected into the KernelContext.
     """
+    from emergence.persistence.flush import restore_persistence
+    from emergence.persistence.paths import (
+        checkpoints_path,
+        ensure_data_dir,
+        events_path,
+        memory_path,
+        should_persist,
+    )
 
-    event_store = EventStore()
+    use_persist = persist or should_persist()
+    if use_persist:
+        ensure_data_dir()
+
+    if use_persist:
+        from emergence.events.event_store import JsonlEventStore
+
+        event_store = JsonlEventStore(events_path())
+    else:
+        event_store = EventStore()
     event_bus = PersistingEventBus(event_store)
     capabilities = CapabilityManager()
     security = SecurityManager(capabilities)
@@ -57,13 +79,29 @@ def create_kernel_context(
     process_table = ProcessTable()
     mailboxes = MailboxManager(event_bus)
 
-    memory_store = MemoryStore()
+    if use_persist:
+        from emergence.memory.file_memory_store import FileMemoryStore
+
+        memory_store = FileMemoryStore(memory_path())
+    else:
+        memory_store = MemoryStore()
     memory = MemoryManager(memory_store, event_bus)
-    checkpoints = CheckpointManager.in_memory(
-        event_bus,
-        memory,
-        budgets,
-    )
+
+    if use_persist:
+        from emergence.checkpoint.sqlite_adapter import SQLiteCheckpointStore
+
+        checkpoints = CheckpointManager(
+            SQLiteCheckpointStore(checkpoints_path()),
+            event_bus,
+            memory,
+            budgets,
+        )
+    else:
+        checkpoints = CheckpointManager.in_memory(
+            event_bus,
+            memory,
+            budgets,
+        )
 
     exec_ = executor if executor is not None else Executor()
 
@@ -82,6 +120,10 @@ def create_kernel_context(
 
     observability = ObservabilityKernel(event_store, event_bus)
     cognitive = CognitiveManager(event_bus=event_bus)
+    goal_registry = GoalRegistry(event_bus=event_bus)
+    knowledge_index = create_knowledge_index(event_bus)
+    space_registry = SpaceRegistry()
+    schedule_manager = ScheduleManager(event_bus=event_bus)
 
     plugins = PluginManager(
         registry=registry,
@@ -90,7 +132,7 @@ def create_kernel_context(
         plugins_root=PLUGINS_ROOT,
     )
 
-    return KernelContext(
+    ctx = KernelContext(
         event_bus=event_bus,
         event_store=event_store,
         state=state,
@@ -108,7 +150,33 @@ def create_kernel_context(
         observability=observability,
         plugins=plugins,
         cognitive=cognitive,
+        goal_registry=goal_registry,
+        knowledge_index=knowledge_index,
+        space_registry=space_registry,
+        schedule_manager=schedule_manager,
     )
+
+    def _space_for_process(process_id) -> str:
+        goal_id = goal_registry.goal_for_process(process_id)
+        if goal_id is None:
+            return space_registry.active_space_id
+        record = goal_registry.get(goal_id)
+        if record is None:
+            return space_registry.active_space_id
+        return record.space_id
+
+    memory.bind_space_resolver(_space_for_process)
+    goal_registry.bind_context(ctx)
+    knowledge_index.bind_context(ctx)
+
+    if use_persist:
+        restore_persistence(ctx)
+        goal_registry.sync_from_cognitive(cognitive)
+        if not knowledge_index.query():
+            knowledge_index.rebuild_from_event_store(ctx.event_store)
+        knowledge_index.reconcile_from_memory()
+
+    return ctx
 
 
 def build_kernel(
@@ -116,6 +184,7 @@ def build_kernel(
     spawn: str | None = "hello_world",
     enable_supervisor: bool = True,
     load_plugins: bool = True,
+    persist: bool = False,
 ) -> Kernel:
     """
     Construct a fully wired Kernel from the composition root.
@@ -132,7 +201,7 @@ def build_kernel(
     """
 
     executor = Executor()
-    ctx = create_kernel_context(executor=executor)
+    ctx = create_kernel_context(executor=executor, persist=persist)
     lifecycle = LifecycleManager()
 
     if load_plugins:
@@ -297,9 +366,14 @@ def build_research_assistant(
     ctx.state.set("research_topic", topic)
     ctx.state.set("auto_approve", auto_approve)
 
+    goal = kernel.create_goal(
+        f"Research: {topic}",
+        kind=GoalKind.PERSISTENT,
+    )
     kernel.spawn(
         ctx.registry.get("research_assistant"),
+        goal_id=goal.goal_id,
         priority=10,
     )
 
-    return kernel
+    return kernel, goal

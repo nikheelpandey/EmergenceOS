@@ -39,6 +39,7 @@ from uuid import UUID, uuid4
 from emergence.core.budget_tracker import BudgetExhaustedError
 from emergence.core.event import Event, EventType
 from emergence.cognitive.manager import CognitiveManager, TaskSpec
+from emergence.cognitive.goal_registry import GoalKind
 from emergence.core.goal import Goal
 from emergence.core.ids import EventID, GoalID, PlanID, ProcessID
 from emergence.core.plan import Plan
@@ -132,6 +133,13 @@ class Kernel:
 
         if correlation_id is None:
             correlation_id = uuid4()
+
+        if goal_id is not None:
+            self._ctx.goal_registry.associate_process(
+                goal_id,
+                process.process_id,
+                as_root=parent_process_id is None,
+            )
 
         created = self._publish_event(
             EventType.PROCESS_CREATED,
@@ -357,6 +365,7 @@ class Kernel:
         Called automatically by ``run_forever`` on each idle cycle.
         """
         self._ctx.scheduler.evaluate_waiting()
+        self._ctx.schedule_manager.process_due(self)
 
         for process in self._ctx.process_table.all():
             if process.state != ProcessState.WAITING:
@@ -387,9 +396,20 @@ class Kernel:
     # Cognitive API (M12)
     # ------------------------------------------------------------------
 
-    def create_goal(self, description: str) -> Goal:
-        """Create a new goal."""
-        return self._ctx.cognitive.create_goal(description)
+    def create_goal(
+        self,
+        description: str,
+        *,
+        kind: GoalKind = GoalKind.ONE_SHOT,
+    ) -> Goal:
+        """Create a new goal and register it as a living workload."""
+        goal = self._ctx.cognitive.create_goal(description)
+        self._ctx.goal_registry.register(
+            goal.goal_id,
+            description,
+            kind=kind,
+        )
+        return goal
 
     def start_planning(self, goal_id: GoalID) -> Goal:
         """Transition a goal to PLANNING state."""

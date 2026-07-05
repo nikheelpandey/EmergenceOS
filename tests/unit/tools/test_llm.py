@@ -22,10 +22,24 @@ class TestMockLLMProvider:
     def test_research_prompt_returns_findings(self):
         provider = MockLLMProvider()
         response = provider.chat([
-            {"role": "user", "content": "Research the topic of event-driven systems"},
+            {"role": "user", "content": "Research thoroughly: mahatma gandhi"},
         ])
-        assert "Research findings" in response.content
+        assert "mahatma gandhi" in response.content.lower()
         assert response.tokens_used > 0
+
+    def test_report_prompt_includes_topic(self):
+        provider = MockLLMProvider()
+        response = provider.chat([
+            {
+                "role": "user",
+                "content": (
+                    "Synthesize a final research report on 'mahatma gandhi' "
+                    "from these findings:\n\nSome findings here."
+                ),
+            },
+        ])
+        assert "mahatma gandhi" in response.content.lower()
+        assert "Research Report" in response.content
 
     def test_evaluation_prompt_returns_json(self):
         provider = MockLLMProvider()

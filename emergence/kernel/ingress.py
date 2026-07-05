@@ -10,6 +10,9 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING
 
+from emergence.apps.research_output import format_research_output
+from emergence.cognitive.goal_registry import GoalKind
+
 if TYPE_CHECKING:
     from emergence.kernel.kernel import Kernel
 
@@ -24,7 +27,8 @@ class KernelIngress:
     ps                List live processes
     spawn <plugin>    Spawn a plugin process
     goal <text>       Create goal + plan + execute (worker demo)
-    research <topic>  Spawn research assistant for a topic
+    research <topic>  spawn research assistant (use 'report' for output)
+    report            show latest research report
     plan <topic>      Run LLM planner and execute resulting plan
     approve <id>      Grant a pending user approval
     status            Show OS status and event count
@@ -55,6 +59,7 @@ class KernelIngress:
             "spawn": lambda a: self._cmd_spawn(a),
             "goal": lambda a: self._cmd_goal(a),
             "research": lambda a: self._cmd_research(a),
+            "report": lambda _: self._cmd_report(),
             "plan": lambda a: self._cmd_plan(a),
             "approve": lambda a: self._cmd_approve(a),
             "status": self._cmd_status,
@@ -101,7 +106,8 @@ class KernelIngress:
             "  spawn <plugin>      spawn a plugin\n"
             "  goal <description>  cognitive goal demo\n"
             "  plan <topic>        LLM plan + execute\n"
-            "  research <topic>  research assistant\n"
+            "  research <topic>  research assistant (then: report)\n"
+            "  report              show research report\n"
             "  approve <id>        grant user approval\n"
             "  status              OS status\n"
             "  quit                shutdown"
@@ -156,11 +162,22 @@ class KernelIngress:
         ctx = self._kernel.context
         ctx.state.set("research_topic", topic)
         ctx.state.set("auto_approve", True)
+        goal = self._kernel.create_goal(
+            f"Research: {topic}",
+            kind=GoalKind.PERSISTENT,
+        )
         process = self._kernel.spawn(
             ctx.registry.get("research_assistant"),
+            goal_id=goal.goal_id,
             priority=8,
         )
-        return f"Research assistant spawned for: {topic} ({process.process_id})"
+        return (
+            f"Research assistant spawned for: {topic} ({process.process_id})\n"
+            "Run 'report' after the process completes to see output."
+        )
+
+    def _cmd_report(self) -> str:
+        return format_research_output(self._kernel)
 
     def _cmd_plan(self, topic: str) -> str:
         if not topic:

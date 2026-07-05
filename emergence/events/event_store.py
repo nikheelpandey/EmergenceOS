@@ -63,6 +63,14 @@ class EventStore:
             return list(self._events)
         return [e for e in self._events if e.timestamp >= since]
 
+    def get(self, event_id: EventID | str) -> Event | None:
+        """Return one event by id, or None if not found."""
+        target = str(event_id)
+        for event in self._events:
+            if str(event.event_id) == target:
+                return event
+        return None
+
     def count(self) -> int:
         return len(self._events)
 
