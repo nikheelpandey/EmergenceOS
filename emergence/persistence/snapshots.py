@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from emergence.artifacts.service import ArtifactService
 from emergence.cognitive.goal_registry import GoalRegistry
 from emergence.cognitive.manager import CognitiveManager
 from emergence.memory.knowledge_index import KnowledgeIndex
@@ -64,6 +65,20 @@ def restore_knowledge_snapshot(index: KnowledgeIndex, path: Path) -> None:
         return
     data = json.loads(path.read_text())
     index.restore(data)
+
+
+def save_artifacts_snapshot(service: ArtifactService, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(service.snapshot(), indent=2, default=str) + "\n"
+    )
+
+
+def restore_artifacts_snapshot(service: ArtifactService, path: Path) -> None:
+    if not path.exists():
+        return
+    data = json.loads(path.read_text())
+    service.restore(data)
 
 
 def save_spaces_snapshot(registry, path: Path) -> None:

@@ -84,3 +84,8 @@ class EventID(BaseID):
 @dataclass(frozen=True, slots=True)
 class CheckpointID(BaseID):
     """Unique identifier for a Checkpoint."""
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactID(BaseID):
+    """Unique identifier for a physical Artifact."""

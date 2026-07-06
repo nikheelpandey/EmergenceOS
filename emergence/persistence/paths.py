@@ -48,6 +48,18 @@ def spaces_path() -> Path:
     return data_dir() / "spaces.json"
 
 
+def vfs_path() -> Path:
+    return data_dir() / "vfs"
+
+
+def artifacts_path() -> Path:
+    return data_dir() / "artifacts.json"
+
+
+def artifacts_blob_root() -> Path:
+    return data_dir() / "artifacts"
+
+
 def schedules_path() -> Path:
     return data_dir() / "schedules.json"
 

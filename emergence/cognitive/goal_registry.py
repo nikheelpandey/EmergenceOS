@@ -5,9 +5,12 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from emergence.core.budget import ResourceBudget
 from emergence.core.event import Event, EventType
 from emergence.core.ids import GoalID, ProcessID
 from emergence.core.state import ProcessState
+from emergence.cognitive.goal_policy import GoalPolicy, apply_goal_runtime_config
+from emergence.events.event_bus import EventBus
 from emergence.spaces.registry import DEFAULT_SPACE_ID
 
 if TYPE_CHECKING:
@@ -58,6 +61,8 @@ class GoalRecord:
   has_process_failure: bool = False
   has_budget_exceeded: bool = False
   space_id: str = DEFAULT_SPACE_ID
+  workload: str = "research"
+  policy: GoalPolicy | None = None
 
   @property
   def all_process_ids(self) -> set[str]:
@@ -225,6 +230,101 @@ class GoalRegistry:
     record = self._require(goal_id)
     record.space_id = space_id
 
+  def set_policy(self, goal_id: GoalID, policy: GoalPolicy) -> None:
+    record = self._require(goal_id)
+    record.policy = policy
+    record.workload = policy.workload
+    if self._ctx is not None:
+      apply_goal_runtime_config(
+          self._ctx,
+          goal_id,
+          policy,
+          description=record.description,
+      )
+
+  def reset_for_rerun(self, goal_id: GoalID) -> None:
+    record = self._require(goal_id)
+    record.archived = False
+    record.has_process_failure = False
+    record.has_budget_exceeded = False
+    record.pipeline_stage = "starting"
+    record.child_process_ids.clear()
+    record.root_process_id = None
+    self._touch(record)
+
+  def remove(self, goal_id: GoalID) -> None:
+    key = str(goal_id)
+    record = self._records.pop(key, None)
+    if record is None:
+      raise GoalNotRegisteredError(f"Goal '{goal_id}' is not registered.")
+    for pid in list(record.all_process_ids):
+      self._process_to_goal.pop(pid, None)
+    self._last_health.pop(key, None)
+
+  def archive(self, goal_id: GoalID) -> None:
+    record = self._require(goal_id)
+    record.archived = True
+    record.pipeline_stage = "archived"
+    self._touch(record)
+
+  def budget_for_goal(self, goal_id: GoalID) -> ResourceBudget | None:
+    record = self.get(goal_id)
+    if record is None or record.policy is None:
+      return None
+    return record.policy.budget
+
+  def policy_usage(self, goal_id: GoalID) -> dict[str, Any] | None:
+    """Return budget limits and aggregate usage for a goal's processes."""
+    record = self.get(goal_id)
+    if record is None or record.policy is None:
+      return None
+    ctx = self._ctx
+    if ctx is None:
+      return {"limits": record.policy.to_dict()["budget"], "usage": {}}
+
+    totals = {
+        "tokens": 0,
+        "tool_invocations": 0,
+        "execution_seconds": 0.0,
+        "cost_usd": 0.0,
+        "retries": 0,
+    }
+    for pid in record.all_process_ids:
+      process_id = ProcessID.from_string(pid)
+      if not ctx.process_table.exists(process_id):
+        continue
+      usage = ctx.budgets.usage(process_id)
+      totals["tokens"] += usage.tokens
+      totals["tool_invocations"] += usage.tool_invocations
+      totals["execution_seconds"] += usage.execution_seconds
+      totals["cost_usd"] += usage.cost_usd
+      totals["retries"] += usage.retries
+
+    limits = record.policy.budget
+    return {
+        "workload": record.workload,
+        "spend_preset": record.policy.spend_preset,
+        "autonomy_preset": record.policy.autonomy_preset,
+        "auto_approve": record.policy.auto_approve,
+        "limits": {
+            "max_tokens": limits.max_tokens,
+            "max_cost_usd": limits.max_cost_usd,
+            "max_tool_invocations": limits.max_tool_invocations,
+            "max_execution_time_seconds": limits.max_execution_time_seconds,
+            "max_retries": limits.max_retries,
+        },
+        "usage": totals,
+        "utilization": {
+            "tokens_pct": _pct(totals["tokens"], limits.max_tokens),
+            "cost_pct": _pct(totals["cost_usd"], limits.max_cost_usd),
+            "tools_pct": _pct(
+                totals["tool_invocations"],
+                limits.max_tool_invocations,
+            ),
+        },
+        "config": dict(record.policy.config),
+    }
+
   def list_views(
       self,
       *,
@@ -271,6 +371,10 @@ class GoalRegistry:
                 "has_process_failure": record.has_process_failure,
                 "has_budget_exceeded": record.has_budget_exceeded,
                 "space_id": record.space_id,
+                "workload": record.workload,
+                "policy": (
+                    record.policy.to_dict() if record.policy is not None else None
+                ),
             }
             for record in self._records.values()
         ],
@@ -302,6 +406,12 @@ class GoalRegistry:
           has_process_failure=bool(raw.get("has_process_failure", False)),
           has_budget_exceeded=bool(raw.get("has_budget_exceeded", False)),
           space_id=str(raw.get("space_id", DEFAULT_SPACE_ID)),
+          workload=str(raw.get("workload", "research")),
+          policy=(
+              GoalPolicy.from_dict(raw["policy"])
+              if raw.get("policy") is not None
+              else None
+          ),
       )
       self._records[str(record.goal_id)] = record
 
@@ -331,6 +441,8 @@ class GoalRegistry:
             else None
         ),
         "process_ids": sorted(record.all_process_ids),
+        "workload": record.workload,
+        "policy": record.policy.to_dict() if record.policy else None,
         "knowledge": knowledge,
         "stats": {
             "uptime_seconds": round(stats.uptime_seconds, 2),
@@ -546,3 +658,9 @@ def _pending_approvals_for_goal(
         }
     )
   return pending
+
+
+def _pct(used: float, limit: float) -> float:
+    if limit <= 0:
+        return 0.0
+    return round(min(100.0, (used / limit) * 100.0), 1)

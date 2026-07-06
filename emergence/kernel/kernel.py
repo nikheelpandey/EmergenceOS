@@ -36,6 +36,7 @@ import time
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from emergence.core.budget import ResourceBudget
 from emergence.core.budget_tracker import BudgetExhaustedError
 from emergence.core.event import Event, EventType
 from emergence.cognitive.manager import CognitiveManager, TaskSpec
@@ -99,6 +100,7 @@ class Kernel:
         depends_on: tuple[ProcessID, ...] = (),
         causation_id: EventID | None = None,
         correlation_id: UUID | None = None,
+        budget: ResourceBudget | None = None,
     ) -> Process:
         """
         Create and schedule a new process.
@@ -107,11 +109,17 @@ class Kernel:
         if not self._ctx.registry.exists(definition.name):
             self._ctx.registry.register(definition)
 
+        process_budget = budget
+        if process_budget is None and goal_id is not None:
+            process_budget = self._ctx.goal_registry.budget_for_goal(goal_id)
+        if process_budget is None:
+            process_budget = definition.default_budget
+
         process = Process(
             definition=definition,
             goal_id=goal_id,
             parent_process_id=parent_process_id,
-            budget=definition.default_budget,
+            budget=process_budget,
         )
 
         pid = str(process.process_id)
@@ -487,6 +495,36 @@ class Kernel:
         self.run()
         plan = self.finalize_plan_from_planner(goal.goal_id)
         return goal, plan
+
+    def cancel_goal_processes(self, goal_id: GoalID) -> list[str]:
+        """Cancel all non-finished processes associated with a goal."""
+        record = self._ctx.goal_registry.get(goal_id)
+        if record is None:
+            return []
+
+        cancelled: list[str] = []
+        for pid in list(record.all_process_ids):
+            process_id = ProcessID.from_string(pid)
+            if not self._ctx.process_table.exists(process_id):
+                continue
+            process = self._ctx.process_table.get(process_id)
+            if process.is_finished:
+                continue
+            try:
+                self._lifecycle.cancel(process)
+            except ValueError:
+                try:
+                    self._lifecycle.fail(process, "cancelled")
+                except ValueError:
+                    continue
+            self._publish_event(
+                EventType.PROCESS_CANCELLED,
+                process,
+                {"reason": "goal management"},
+            )
+            self._cleanup_process(process)
+            cancelled.append(pid)
+        return cancelled
 
     def grant_user_approval(self, request_id: str) -> None:
         """Record user approval and wake waiting processes."""

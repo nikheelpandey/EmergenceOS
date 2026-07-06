@@ -5,6 +5,41 @@ All notable changes to EmergenceOS are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-06
+
+Artifact Service kernel primitive (M30), OS tools, goal policies, and Goal Inbox web UI v2.
+
+### Added
+
+#### Artifact Service (M30)
+- `ArtifactService` — core kernel primitive for durable, typed, physical artifacts (PDFs, resumes, datasets, code, images, …)
+- Separate from Knowledge: **semantic** facts vs **physical** outputs
+- Versioning with lineage (`active` / `superseded` / `deleted`), provenance, tags, and cross-artifact links
+- Event-driven lifecycle: `artifact.created`, `artifact.updated`, `artifact.deleted` — scheduler wakes waiting processes
+- Blob storage under `{EMERGENCE_DATA_DIR}/artifacts/`; metadata in `artifacts.json`
+- Kernel tools: `artifact.create`, `artifact.read`, `artifact.update`, `artifact.delete`, `artifact.search`, `artifact.version`, `artifact.watch`, `artifact.link`, `artifact.export`
+- Capabilities: `artifact.read`, `artifact.write`
+- HTTP: `GET /artifacts`, `GET /artifacts/{id}`, `GET /goals/{id}/artifacts`
+- Admin API: `artifacts.list`, `artifacts.get`
+
+#### OS tools
+- Virtual filesystem: `fs.read`, `fs.write`, `fs.list`, `fs.delete`, `fs.stat` (space-scoped under `vfs/`)
+- `shell.exec`, `http.fetch`, `process.spawn`, `process.status`, `process.find`, `schedule.at`
+- `knowledge.search`, `knowledge.get`, `event.search`, `state.query`
+
+#### Goal policy & management
+- `GoalPolicy` — spend presets (low/medium/high), autonomy presets, workload mode binding
+- HTTP goal management: `PATCH /goals/{id}`, `POST /goals/{id}/cancel`, `/rerun`, `DELETE /goals/{id}`
+- `GET /goals/{id}/policy` — policy and budget usage view
+
+#### Web UI v2
+- Tabbed interface: Goals, Live, Knowledge, Timeline, Policy
+- Goal creation with mode, spend, and autonomy presets
+- Goal bar with pipeline, cancel/rerun actions, policy editor
+
+### Tests
+- 595 tests (artifact service unit + integration, OS tools, goal policy)
+
 ## [0.3.0] - 2026-07-05
 
 UX foundation and first product surface (M19–M29): live control plane, durable persistence, goal registry, knowledge layer, narrative timeline, event inspector, HTTP ingress, Goal Inbox web UI, spaces, scheduled work, and channel ingress.
@@ -157,6 +192,7 @@ First public release. EmergenceOS ships a working kernel, plugin ecosystem, cogn
 #### Tests
 - 462 tests at v0.1.0 tag
 
+[0.4.0]: https://github.com/nikheelpandey/EmergenceOS/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/nikheelpandey/EmergenceOS/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/nikheelpandey/EmergenceOS/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nikheelpandey/EmergenceOS/releases/tag/v0.1.0

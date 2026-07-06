@@ -13,7 +13,20 @@ from emergence.executor.tool_model import (
     ToolResult,
     ToolRequestedEvent,
 )
-from emergence.security.capabilities import TOOL_LLM, TOOL_PYTHON
+from emergence.security.capabilities import (
+    ARTIFACT_READ,
+    ARTIFACT_WRITE,
+    FILESYSTEM_READ,
+    FILESYSTEM_WRITE,
+    MEMORY_READ,
+    PROCESS_CREATE,
+    PROCESS_INSPECT,
+    STATE_READ,
+    TOOL_BROWSER,
+    TOOL_LLM,
+    TOOL_PYTHON,
+    TOOL_SHELL,
+)
 from emergence.security.capability import Capability
 from emergence.security.errors import PermissionDeniedError
 from emergence.security.security_manager import SecurityManager
@@ -25,6 +38,41 @@ def capability_for_tool(tool_name: str) -> Capability:
     """Return the capability required to invoke a tool."""
     if tool_name.startswith("llm."):
         return TOOL_LLM
+    if tool_name in {"fs.read", "fs.list", "fs.stat"}:
+        return FILESYSTEM_READ
+    if tool_name in {"fs.write", "fs.delete"}:
+        return FILESYSTEM_WRITE
+    if tool_name.startswith("http."):
+        return TOOL_BROWSER
+    if tool_name.startswith("shell."):
+        return TOOL_SHELL
+    if tool_name.startswith("knowledge."):
+        return MEMORY_READ
+    if tool_name in {
+        "artifact.read",
+        "artifact.search",
+        "artifact.version",
+        "artifact.export",
+    }:
+        return ARTIFACT_READ
+    if tool_name in {
+        "artifact.create",
+        "artifact.update",
+        "artifact.delete",
+        "artifact.link",
+        "artifact.watch",
+    }:
+        return ARTIFACT_WRITE
+    if tool_name.startswith("event."):
+        return PROCESS_INSPECT
+    if tool_name.startswith("state."):
+        return STATE_READ
+    if tool_name == "process.spawn":
+        return PROCESS_CREATE
+    if tool_name in {"process.status", "process.find"}:
+        return PROCESS_INSPECT
+    if tool_name.startswith("schedule."):
+        return PROCESS_CREATE
     return TOOL_PYTHON
 
 

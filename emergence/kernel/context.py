@@ -15,6 +15,7 @@ from emergence.kernel.process_table import ProcessTable
 from emergence.kernel.registry import ProcessRegistry
 from emergence.kernel.state_store import StateStore
 from emergence.memory.memory_manager import MemoryManager
+from emergence.artifacts.service import ArtifactService
 from emergence.memory.knowledge_index import KnowledgeIndex
 from emergence.observability.kernel import ObservabilityKernel
 from emergence.plugins.manager import PluginManager
@@ -54,5 +55,6 @@ class KernelContext:
     cognitive: CognitiveManager
     goal_registry: GoalRegistry
     knowledge_index: KnowledgeIndex
+    artifact_service: ArtifactService
     space_registry: SpaceRegistry
     schedule_manager: ScheduleManager

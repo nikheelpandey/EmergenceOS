@@ -3,115 +3,161 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EmergenceOS — Goal Inbox</title>
+  <title>EmergenceOS</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="layout">
-    <aside class="sidebar">
-      <header class="brand">
-        <h1>EmergenceOS</h1>
-        <p class="tagline">Goals, not chat threads</p>
-      </header>
+  <header class="topbar">
+    <span class="brand">EmergenceOS</span>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="goals" role="tab">Goals</button>
+      <button class="tab" data-tab="live" role="tab">Live</button>
+      <button class="tab" data-tab="knowledge" role="tab">Knowledge</button>
+      <button class="tab" data-tab="timeline" role="tab">Timeline</button>
+      <button class="tab" data-tab="policy" role="tab">Policy</button>
+      <button class="tab" data-tab="system" role="tab">System</button>
+    </nav>
+  </header>
 
-      <section class="panel">
-        <h2>Spaces</h2>
-        <ul id="space-list" class="space-list"></ul>
-        <form id="new-space-form" class="inline-form">
-          <input type="text" id="new-space-name" placeholder="New space…" required>
-          <button type="submit">Add</button>
-        </form>
-      </section>
+  <section id="goal-bar" class="goal-bar hidden">
+    <div class="goal-bar-top">
+      <span id="goal-bar-title" class="goal-bar-title"></span>
+      <span id="goal-bar-health" class="health-tag"></span>
+      <span id="goal-bar-pct" class="goal-bar-pct"></span>
+      <div class="goal-actions">
+        <button type="button" id="action-edit" class="btn-ghost">Edit</button>
+        <button type="button" id="action-rerun" class="btn-ghost">Rerun</button>
+        <button type="button" id="action-cancel" class="btn-ghost">Cancel</button>
+        <button type="button" id="action-delete" class="btn-ghost danger">Delete</button>
+      </div>
+    </div>
+    <div class="bar-track"><div id="goal-bar-fill" class="bar-fill"></div></div>
+    <div id="goal-bar-pipeline" class="pipeline-list"></div>
+  </section>
 
-      <section class="panel">
-        <h2>Submit goal</h2>
-        <form id="new-goal-form">
-          <textarea id="goal-description" rows="3" placeholder="Research quantum computing…" required></textarea>
+  <main class="main">
+    <section id="panel-goals" class="panel" role="tabpanel">
+      <div class="toolbar">
+        <label class="field-inline">
+          Space
+          <select id="space-select"></select>
+        </label>
+        <button id="new-space-btn" type="button" class="btn-ghost">+ Space</button>
+        <label class="field-inline">
+          <input type="checkbox" id="show-archived"> Show archived
+        </label>
+      </div>
+
+      <form id="new-goal-form" class="goal-form">
+        <textarea id="goal-description" rows="2" placeholder="Research quantum computing…" required></textarea>
+        <div class="form-row">
           <select id="goal-mode">
             <option value="research">Research assistant</option>
             <option value="goal">Goal only</option>
             <option value="worker">Worker demo</option>
           </select>
+          <select id="goal-spend" title="Spend cap">
+            <option value="low">Spend: low</option>
+            <option value="medium" selected>Spend: medium</option>
+            <option value="high">Spend: high</option>
+          </select>
+          <select id="goal-autonomy" title="Approval mode">
+            <option value="ask">Ask before sensitive steps</option>
+            <option value="auto">Auto-approve</option>
+          </select>
           <button type="submit">Create goal</button>
-        </form>
-      </section>
-
-      <nav class="panel">
-        <button id="view-monitor" class="nav-btn">Activity Monitor</button>
-      </nav>
-    </aside>
-
-    <main class="content">
-      <section id="empty-state" class="empty-state">
-        <h2>Your operating system for goals</h2>
-        <p>Create a goal on the left. EmergenceOS runs processes in the background — you watch health, knowledge, and timeline instead of chatting.</p>
-      </section>
-
-      <section id="goal-list-view" class="hidden">
-        <header class="content-header">
-          <h2>Goals</h2>
-          <span id="goal-count" class="badge"></span>
-        </header>
-        <div id="goal-cards" class="goal-cards"></div>
-      </section>
-
-      <section id="goal-detail-view" class="hidden">
-        <header class="content-header">
-          <button id="back-to-list" class="link-btn">← Goals</button>
-          <h2 id="detail-title"></h2>
-          <span id="detail-health" class="health-pill"></span>
-        </header>
-
-        <div class="detail-grid">
-          <article class="card">
-            <h3>Overview</h3>
-            <p id="detail-overview"></p>
-            <div id="detail-stats" class="stats-row"></div>
-          </article>
-
-          <article class="card">
-            <h3>Processes</h3>
-            <div id="detail-processes" class="process-list"></div>
-          </article>
-
-          <article class="card wide">
-            <h3>Results</h3>
-            <div id="detail-results" class="results-panel">
-              <p class="muted">No report yet — research may still be running.</p>
-            </div>
-          </article>
-
-          <article class="card">
-            <h3>Knowledge</h3>
-            <div id="detail-knowledge"></div>
-          </article>
-
-          <article class="card wide">
-            <h3>Timeline</h3>
-            <div id="detail-timeline" class="timeline"></div>
-          </article>
-
-          <article class="card wide hidden" id="inspector-card">
-            <h3>Event inspector</h3>
-            <pre id="inspector-output"></pre>
-          </article>
         </div>
-      </section>
+      </form>
 
-      <section id="monitor-view" class="hidden">
-        <header class="content-header">
-          <button id="back-from-monitor" class="link-btn">← Goals</button>
-          <h2>Activity Monitor</h2>
-        </header>
-        <div id="monitor-processes" class="process-list"></div>
-      </section>
+      <div id="goal-list" class="goal-list"></div>
+      <p id="goals-empty" class="empty hidden">No goals yet. Create one above.</p>
+    </section>
 
-      <section id="approvals-bar" class="approvals-bar hidden">
-        <h3>Approvals needed</h3>
-        <div id="approval-cards"></div>
-      </section>
-    </main>
-  </div>
+    <section id="panel-live" class="panel hidden" role="tabpanel">
+      <p id="live-empty" class="empty">Select a goal from the Goals tab to watch live activity.</p>
+      <div id="live-feed" class="feed"></div>
+      <div id="live-results" class="live-results hidden">
+        <h3 class="section-label">Latest output</h3>
+        <pre id="live-results-body"></pre>
+      </div>
+    </section>
+
+    <section id="panel-knowledge" class="panel hidden" role="tabpanel">
+      <p id="knowledge-empty" class="empty">Select a goal to browse knowledge artifacts.</p>
+      <table id="knowledge-table" class="data-table hidden">
+        <thead>
+          <tr><th>Type</th><th>Key</th><th>Size</th><th></th></tr>
+        </thead>
+        <tbody id="knowledge-body"></tbody>
+      </table>
+      <pre id="knowledge-preview" class="preview hidden"></pre>
+    </section>
+
+    <section id="panel-timeline" class="panel hidden" role="tabpanel">
+      <p id="timeline-empty" class="empty">Select a goal to view its timeline.</p>
+      <div id="timeline-list" class="timeline-list"></div>
+      <div id="inspector-panel" class="inspector hidden">
+        <h3 class="section-label">Event inspector</h3>
+        <dl id="inspector-fields" class="inspector-fields"></dl>
+        <details class="raw-details">
+          <summary>Raw JSON</summary>
+          <pre id="inspector-raw"></pre>
+        </details>
+      </div>
+    </section>
+
+    <section id="panel-policy" class="panel hidden" role="tabpanel">
+      <p id="policy-empty" class="empty">Select a goal to view its policy and budget usage.</p>
+      <div id="policy-content" class="hidden">
+        <form id="edit-goal-form" class="goal-form">
+          <label class="section-label" for="edit-description">Description</label>
+          <textarea id="edit-description" rows="2"></textarea>
+          <div class="form-row">
+            <select id="edit-spend">
+              <option value="low">Spend: low</option>
+              <option value="medium">Spend: medium</option>
+              <option value="high">Spend: high</option>
+            </select>
+            <select id="edit-autonomy">
+              <option value="ask">Ask before sensitive steps</option>
+              <option value="auto">Auto-approve</option>
+            </select>
+            <button type="submit">Save changes</button>
+          </div>
+        </form>
+        <div id="policy-summary" class="system-summary"></div>
+        <h3 class="section-label">Limits</h3>
+        <table class="data-table">
+          <thead>
+            <tr><th>Resource</th><th>Used</th><th>Limit</th><th></th></tr>
+          </thead>
+          <tbody id="policy-limits"></tbody>
+        </table>
+        <h3 class="section-label">Configuration</h3>
+        <pre id="policy-config" class="mono-block"></pre>
+      </div>
+    </section>
+
+    <section id="panel-system" class="panel hidden" role="tabpanel">
+      <div id="system-summary" class="system-summary"></div>
+      <h3 class="section-label">Processes</h3>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>State</th><th>Age</th><th>Tokens</th><th>Tools</th><th>Exec</th><th>Mailbox</th>
+          </tr>
+        </thead>
+        <tbody id="system-processes"></tbody>
+      </table>
+      <h3 class="section-label">Scheduler queue</h3>
+      <pre id="system-queue" class="mono-block"></pre>
+    </section>
+  </main>
+
+  <aside id="approvals-bar" class="approvals-bar hidden">
+    <h3 class="section-label">Approvals needed</h3>
+    <div id="approval-list"></div>
+  </aside>
 
   <script src="/app.js"></script>
 </body>

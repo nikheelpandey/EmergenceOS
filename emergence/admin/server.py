@@ -12,11 +12,13 @@ from emergence.admin.protocol import (
 )
 from emergence.admin.snapshot_api import (
     build_admin_snapshot,
+    build_artifacts_payload,
     build_events_payload,
     build_goal_payload,
     build_inspect_payload,
     build_knowledge_artifact_payload,
     build_knowledge_payload,
+    build_physical_artifact_payload,
     build_space_desktop_payload,
     build_spaces_payload,
     build_timeline_payload,
@@ -194,6 +196,33 @@ class AdminServer:
                     )
                 try:
                     result = build_knowledge_artifact_payload(
+                        self._kernel,
+                        artifact_id,
+                    )
+                except KeyError:
+                    return AdminResponse(
+                        request_id=request_id,
+                        ok=False,
+                        error=f"artifact not found: {artifact_id}",
+                    )
+            elif method == "artifacts.list":
+                result = build_artifacts_payload(
+                    self._kernel,
+                    goal_id=str(params.get("goal_id", "")) or None,
+                    artifact_type=str(params.get("artifact_type", "")) or None,
+                    space_id=str(params.get("space_id", "")) or None,
+                    query=str(params.get("query", "")) or None,
+                )
+            elif method == "artifacts.get":
+                artifact_id = str(params.get("artifact_id", ""))
+                if not artifact_id:
+                    return AdminResponse(
+                        request_id=request_id,
+                        ok=False,
+                        error="missing artifact_id",
+                    )
+                try:
+                    result = build_physical_artifact_payload(
                         self._kernel,
                         artifact_id,
                     )

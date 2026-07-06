@@ -3,6 +3,7 @@ from __future__ import annotations
 from emergence.cognitive.manager import CognitiveManager
 from emergence.kernel.context import KernelContext
 from emergence.persistence.paths import (
+    artifacts_path,
     cognitive_path,
     goal_registry_path,
     knowledge_path,
@@ -11,12 +12,14 @@ from emergence.persistence.paths import (
     state_path,
 )
 from emergence.persistence.snapshots import (
+    restore_artifacts_snapshot,
     restore_cognitive_snapshot,
     restore_goal_registry_snapshot,
     restore_knowledge_snapshot,
     restore_schedules_snapshot,
     restore_spaces_snapshot,
     restore_state_snapshot,
+    save_artifacts_snapshot,
     save_cognitive_snapshot,
     save_goal_registry_snapshot,
     save_knowledge_snapshot,
@@ -32,6 +35,7 @@ def flush_persistence(ctx: KernelContext) -> None:
     save_cognitive_snapshot(ctx.cognitive, cognitive_path())
     save_goal_registry_snapshot(ctx.goal_registry, goal_registry_path())
     save_knowledge_snapshot(ctx.knowledge_index, knowledge_path())
+    save_artifacts_snapshot(ctx.artifact_service, artifacts_path())
     save_spaces_snapshot(ctx.space_registry, spaces_path())
     save_schedules_snapshot(ctx.schedule_manager, schedules_path())
     ctx.checkpoints.close()
@@ -43,5 +47,6 @@ def restore_persistence(ctx: KernelContext) -> None:
     restore_cognitive_snapshot(ctx.cognitive, cognitive_path())
     restore_goal_registry_snapshot(ctx.goal_registry, goal_registry_path())
     restore_knowledge_snapshot(ctx.knowledge_index, knowledge_path())
+    restore_artifacts_snapshot(ctx.artifact_service, artifacts_path())
     restore_spaces_snapshot(ctx.space_registry, spaces_path())
     restore_schedules_snapshot(ctx.schedule_manager, schedules_path())

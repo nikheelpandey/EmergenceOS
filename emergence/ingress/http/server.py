@@ -16,20 +16,32 @@ from urllib.parse import parse_qs, urlparse
 
 from emergence.admin.snapshot_api import (
     build_admin_snapshot,
+    build_artifacts_payload,
     build_events_payload,
     build_goal_payload,
+    build_goal_policy_payload,
     build_goal_results_payload,
     build_inspect_payload,
     build_knowledge_artifact_payload,
     build_knowledge_payload,
+    build_physical_artifact_payload,
     build_space_desktop_payload,
     build_spaces_payload,
     build_timeline_payload,
 )
 from emergence.core.event import Event, EventType
+from emergence.cognitive.goal_registry import GoalNotRegisteredError
 from emergence.core.ids import GoalID
 from emergence.events.narrative import narrate_event
 from emergence.ingress.channels.webhook import WebhookChannelAdapter
+from emergence.ingress.goal_management import (
+    GoalManagementError,
+    archive_goal,
+    cancel_goal,
+    delete_goal,
+    rerun_goal,
+    update_goal,
+)
 from emergence.ingress.goal_submission import submit_goal
 from emergence.ingress.http.auth import authorize
 from emergence.kernel.kernel import Kernel
@@ -38,10 +50,11 @@ _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 8765
 _WEB_ROOT = Path(__file__).resolve().parents[3] / "web"
 _GOAL_ID_RE = re.compile(
-    r"^/goals/(?P<goal_id>[^/]+)(?P<suffix>/timeline|/knowledge|/processes|/stream|/results)?$"
+    r"^/goals/(?P<goal_id>[^/]+)(?P<suffix>/timeline|/knowledge|/artifacts|/processes|/stream|/results|/policy|/rerun|/cancel)?$"
 )
 _EVENT_ID_RE = re.compile(r"^/events/(?P<event_id>[^/]+)/inspect$")
 _KNOWLEDGE_ID_RE = re.compile(r"^/knowledge/(?P<artifact_id>[^/]+)$")
+_ARTIFACT_ID_RE = re.compile(r"^/artifacts/(?P<artifact_id>[^/]+)$")
 _SPACE_ID_RE = re.compile(r"^/spaces/(?P<space_id>[^/]+)(?P<suffix>/desktop)?$")
 
 
@@ -211,8 +224,14 @@ def _make_handler(server: HttpIngressServer):
 
             if path in {"/goals", "/api/goals"}:
                 space_id = query.get("space_id", [None])[0]
+                include_archived = query.get("include_archived", ["false"])[0].lower() in {
+                    "1",
+                    "true",
+                    "yes",
+                }
                 goals = kernel.context.goal_registry.list_views(
                     space_id=space_id,
+                    include_archived=include_archived,
                 )
                 self._send_json({"goals": goals})
                 return
@@ -229,8 +248,40 @@ def _make_handler(server: HttpIngressServer):
                 )
                 return
 
+            if path in {"/artifacts", "/api/artifacts"}:
+                goal_id = query.get("goal_id", [None])[0]
+                artifact_type = query.get("type", query.get("artifact_type", [None]))[0]
+                space_id = query.get("space_id", [None])[0]
+                search_query = query.get("q", query.get("query", [None]))[0]
+                self._send_json(
+                    build_artifacts_payload(
+                        kernel,
+                        goal_id=goal_id,
+                        artifact_type=artifact_type,
+                        space_id=space_id,
+                        query=search_query,
+                    )
+                )
+                return
+
             if path in {"/spaces", "/api/spaces"}:
                 self._send_json(build_spaces_payload(kernel))
+                return
+
+            match = _ARTIFACT_ID_RE.match(path.replace("/api", "", 1))
+            if match:
+                try:
+                    self._send_json(
+                        build_physical_artifact_payload(
+                            kernel,
+                            match.group("artifact_id"),
+                        )
+                    )
+                except KeyError:
+                    self._send_error_json(
+                        "artifact not found",
+                        HTTPStatus.NOT_FOUND,
+                    )
                 return
 
             match = _KNOWLEDGE_ID_RE.match(path.replace("/api", "", 1))
@@ -288,6 +339,10 @@ def _make_handler(server: HttpIngressServer):
                         self._send_json(
                             build_knowledge_payload(kernel, goal_id=goal_id)
                         )
+                    elif suffix == "/artifacts":
+                        self._send_json(
+                            build_artifacts_payload(kernel, goal_id=goal_id)
+                        )
                     elif suffix == "/results":
                         self._send_json(
                             build_goal_results_payload(kernel, goal_id)
@@ -304,6 +359,8 @@ def _make_handler(server: HttpIngressServer):
                         self._send_json(
                             {"goal_id": goal_id, "processes": processes}
                         )
+                    elif suffix == "/policy":
+                        self._send_json(build_goal_policy_payload(kernel, goal_id))
                     elif suffix == "/stream":
                         self._handle_sse(goal_id)
                     else:
@@ -335,9 +392,14 @@ def _make_handler(server: HttpIngressServer):
                 result = submit_goal(
                     kernel,
                     description,
-                    mode=str(body.get("mode", "goal")),
+                    mode=str(body.get("mode", body.get("workload", "goal"))),
+                    workload=body.get("workload"),
                     space_id=body.get("space_id"),
-                    auto_approve=bool(body.get("auto_approve", False)),
+                    auto_approve=body.get("auto_approve"),
+                    spend_preset=body.get("spend_preset"),
+                    autonomy_preset=body.get("autonomy_preset"),
+                    policy=body.get("policy") if isinstance(body.get("policy"), dict) else None,
+                    config=body.get("config") if isinstance(body.get("config"), dict) else None,
                 )
                 self._send_json(
                     {
@@ -346,6 +408,7 @@ def _make_handler(server: HttpIngressServer):
                         "mode": result.mode,
                         "process_id": result.process_id,
                         "message": result.message,
+                        "policy": result.policy,
                         "tracking_url": (
                             f"{server.base_url()}/goals/{result.goal_id}"
                         ),
@@ -458,7 +521,71 @@ def _make_handler(server: HttpIngressServer):
                 )
                 return
 
+            match = _GOAL_ID_RE.match(path)
+            if match and match.group("suffix") == "/rerun":
+                try:
+                    self._send_json(rerun_goal(kernel, match.group("goal_id")))
+                except GoalNotRegisteredError:
+                    self._send_error_json("goal not found", HTTPStatus.NOT_FOUND)
+                except GoalManagementError as exc:
+                    self._send_error_json(str(exc), HTTPStatus.BAD_REQUEST)
+                return
+
+            match = _GOAL_ID_RE.match(path)
+            if match and match.group("suffix") == "/cancel":
+                try:
+                    self._send_json(cancel_goal(kernel, match.group("goal_id")))
+                except GoalNotRegisteredError:
+                    self._send_error_json("goal not found", HTTPStatus.NOT_FOUND)
+                return
+
             self._send_error_json("not found", HTTPStatus.NOT_FOUND)
+
+        def do_PATCH(self) -> None:  # noqa: N802
+            if not self._require_auth():
+                return
+            path = urlparse(self.path).path.replace("/api", "", 1)
+            match = _GOAL_ID_RE.match(path)
+            if not match or match.group("suffix"):
+                self._send_error_json("not found", HTTPStatus.NOT_FOUND)
+                return
+            body = self._read_json()
+            try:
+                updated = update_goal(
+                    kernel,
+                    match.group("goal_id"),
+                    description=body.get("description"),
+                    spend_preset=body.get("spend_preset"),
+                    autonomy_preset=body.get("autonomy_preset"),
+                    auto_approve=body.get("auto_approve"),
+                    policy=body.get("policy") if isinstance(body.get("policy"), dict) else None,
+                )
+            except GoalNotRegisteredError:
+                self._send_error_json("goal not found", HTTPStatus.NOT_FOUND)
+                return
+            except GoalManagementError as exc:
+                self._send_error_json(str(exc), HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json(updated)
+            return
+
+        def do_DELETE(self) -> None:  # noqa: N802
+            if not self._require_auth():
+                return
+            path = urlparse(self.path).path.replace("/api", "", 1)
+            query = parse_qs(urlparse(self.path).query)
+            match = _GOAL_ID_RE.match(path)
+            if not match or match.group("suffix"):
+                self._send_error_json("not found", HTTPStatus.NOT_FOUND)
+                return
+            hard = query.get("hard", ["false"])[0].lower() in {"1", "true", "yes"}
+            try:
+                result = delete_goal(kernel, match.group("goal_id"), hard=hard)
+            except GoalNotRegisteredError:
+                self._send_error_json("goal not found", HTTPStatus.NOT_FOUND)
+                return
+            self._send_json(result)
+            return
 
         def _serve_static(self, path: str) -> None:
             if path in {"/", "/ui", "/ui/"}:

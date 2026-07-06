@@ -4,11 +4,37 @@
 
 EmergenceOS is an experimental kernel and runtime for AI agents. Instead of treating an agent as a single program, it runs intelligence as **long-lived, event-driven processes** coordinated by a capability-gated kernel.
 
-**Release:** [v0.3.0](CHANGELOG.md) · **Tests:** 560+ passing · **Milestones:** M1–M29 complete
+**Release:** [v0.4.0](CHANGELOG.md) · **Tests:** 595+ · **Milestones:** M1–M30 complete
 
 ---
 
-## What ships in v0.3
+## What ships in v0.4
+
+| Layer | Components |
+|-------|------------|
+| **Kernel** | Scheduler, lifecycle, mailboxes, state store, process table, persistent runtime |
+| **Security** | Capability-based access control on all gated services |
+| **Durability** | Event log, SQLite checkpoints, file memory — survives restart (`EMERGENCE_DATA_DIR`) |
+| **Control plane** | Live admin API, `./eos serve`, runtime lock |
+| **Goals** | `GoalRegistry` — health, uptime, process association, goal policies (spend/autonomy) |
+| **Knowledge** | Semantic artifact index (findings, reports, docs) with provenance |
+| **Artifacts** | Physical artifact service — PDFs, datasets, resumes, code; versioning, search, events |
+| **OS tools** | `artifact.*`, `fs.*`, `shell.exec`, `http.fetch`, `process.*`, `knowledge.search` |
+| **Timeline** | Event log → human narrative, grouped by day |
+| **Inspector** | Full causal chain per event (why, duration, correlation) |
+| **HTTP API** | REST + WebSocket on port 8765 — goals, artifacts, research, approvals |
+| **Web UI** | Goal Inbox v2 — goals, live activity, knowledge, timeline, policy tabs |
+| **Spaces** | Isolated namespaces for work/personal domains |
+| **Channels** | Webhook ingress — submit goals from external systems |
+| **Cognitive + AI** | Goal → Plan → Task, LLM tools (Ollama/OpenAI/mock), research assistant |
+
+Knowledge is **semantic** (facts, summaries, embeddings). Artifacts are **physical** (files, datasets, generated outputs). Processes consume both.
+
+The kernel **never calls an LLM**. Reasoning lives in plugins you install.
+
+---
+
+## What shipped in v0.3
 
 | Layer | Components |
 |-------|------------|
@@ -99,7 +125,7 @@ python boot.py --once --plan "event-driven architecture"
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `EMERGENCE_DATA_DIR` | `~/.emergence` | Durable storage (events, memory, goals, knowledge) |
+| `EMERGENCE_DATA_DIR` | `~/.emergence` | Durable storage (events, memory, goals, knowledge, artifacts) |
 | `EMERGENCE_LLM_PROVIDER` | `mock` | `ollama`, `openai`, or `mock` |
 | `EMERGENCE_LLM_MODEL` | provider-specific | e.g. `qwen2.5:7b` for Ollama |
 | `EMERGENCE_LLM_BASE_URL` | `http://localhost:11434` | Ollama / OpenAI-compatible endpoint |
@@ -137,8 +163,14 @@ Base URL: `http://127.0.0.1:8765`
 | `GET` | `/goals/{id}` | Goal detail |
 | `GET` | `/goals/{id}/results` | Report + findings with full content |
 | `GET` | `/goals/{id}/timeline` | Narrative timeline |
-| `GET` | `/goals/{id}/knowledge` | Knowledge artifacts |
+| `GET` | `/goals/{id}/knowledge` | Knowledge artifacts (semantic) |
+| `GET` | `/goals/{id}/artifacts` | Physical artifacts for a goal |
+| `GET` | `/artifacts` | Search artifacts (`?type=resume&q=google`) |
+| `GET` | `/artifacts/{id}` | Artifact detail + content |
 | `GET` | `/events/{id}/inspect` | Event inspector |
+| `PATCH` | `/goals/{id}` | Update goal description or policy |
+| `POST` | `/goals/{id}/cancel` | Cancel a goal |
+| `POST` | `/goals/{id}/rerun` | Rerun a goal |
 | `POST` | `/approvals/{id}` | Grant approval |
 | `GET` | `/system/snapshot` | Activity monitor data |
 | `POST` | `/channels/webhook` | Channel ingress (`{"text":"Research X"}`) |
@@ -160,7 +192,7 @@ Base URL: `http://127.0.0.1:8765`
         │                    │                    │
         └──────── mailboxes / events ─────────────┘
                              │
-              state · memory · knowledge · goals
+              state · memory · knowledge · artifacts · goals
                              │
                     HTTP API · Web UI · CLI
 ```
@@ -181,13 +213,14 @@ EmergenceOS/
 │   ├── admin/              # Live control plane TCP API
 │   ├── ingress/            # HTTP API, channels, goal submission
 │   ├── persistence/        # Durable snapshots and flush
-│   ├── cognitive/          # Goal registry, cognitive manager
+│   ├── artifacts/          # Physical artifact service (M30)
+│   ├── cognitive/          # Goal registry, goal policy, cognitive manager
 │   ├── memory/             # Memory manager, knowledge index
-│   ├── events/             # Event bus, store, narrative timeline
+│   ├── events/             # Event bus, store, narrative timeline, artifact events
 │   ├── observability/      # Metrics, trace, event inspector
 │   ├── spaces/             # Namespace registry
 │   ├── scheduler/          # Priority queue + schedule manager
-│   └── tools/              # LLM providers
+│   └── tools/              # LLM, artifact, fs, shell, search tools
 ├── plugins/                # Installable applications
 ├── tests/
 └── docs/
@@ -214,6 +247,8 @@ runner: python
 required_capabilities:
   - state.read
   - state.write
+  - artifact.read
+  - artifact.write
 ```
 
 **Full guide:** [docs/building-applications.md](docs/building-applications.md)
@@ -222,10 +257,20 @@ required_capabilities:
 
 ## Documentation
 
+Processes request artifacts by type — not file paths:
+
+```python
+# Find latest resume for this goal — no LLM, no ~/Documents paths
+context.tools.invoke("artifact.search", {
+    "type": "resume",
+    "query": "google",
+})
+```
+
 | Doc | Description |
 |-----|-------------|
-| [005-ux-vision.md](docs/005-ux-vision.md) | UX vision — Goals, Spaces, Knowledge |
-| [milestone.md](milestone.md) | Milestone tracker (M1–M29, all complete) |
+| [005-ux-vision.md](docs/005-ux-vision.md) | UX vision — Goals, Spaces, Knowledge, Artifacts |
+| [milestone.md](milestone.md) | Milestone tracker (M1–M30) |
 | [architecture-diagram.md](docs/architecture-diagram.md) | Layered architecture diagrams |
 | [building-applications.md](docs/building-applications.md) | Plugin development guide |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
@@ -242,7 +287,7 @@ pytest
 
 ## Status
 
-**v0.3.0** — UX foundation complete (M19–M29). Live control plane, durable persistence, goal registry, knowledge layer, narrative timeline, event inspector, HTTP ingress, Goal Inbox web UI, spaces, scheduled work, and channel ingress. Use the web UI or HTTP API to run research with Ollama — no REPL required.
+**v0.4.0** — Artifact Service (M30). Physical artifacts as a first-class kernel primitive alongside goals, knowledge, and processes. Queryable by type and tags, versioned, event-driven (`artifact.created/updated/deleted`), with `artifact.*` tools and HTTP API. Goal policies, OS tools (`fs.*`, `shell`, `process.*`), and Goal Inbox web UI v2 also ship in this release.
 
 ---
 

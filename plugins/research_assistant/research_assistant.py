@@ -16,6 +16,14 @@ from emergence.memory.memory_category import MemoryCategory
 from emergence.tools.json_utils import extract_json
 
 
+def _goal_state_get(context: ProcessContext, key: str, default=None):
+    if context.goal_id is not None:
+        scoped = context.state.get(f"goal:{context.goal_id}:{key}")
+        if scoped is not None:
+            return scoped
+    return context.state.get(key, default)
+
+
 def run(context: ProcessContext) -> str:
     """
     Multi-stage research pipeline:
@@ -26,7 +34,7 @@ def run(context: ProcessContext) -> str:
     3. Request user approval (optional auto-approve)
     4. Generate final report
     """
-    topic = context.state.get("research_topic", "EmergenceOS")
+    topic = _goal_state_get(context, "research_topic", "EmergenceOS")
     stage = get_stage(context)
 
     # Chain stages in a single execution (orchestrator pattern)
@@ -128,7 +136,7 @@ def _stage_evaluate(context: ProcessContext) -> None:
 
 
 def _stage_approval(context: ProcessContext) -> None:
-    auto = context.state.get("auto_approve", True)
+    auto = _goal_state_get(context, "auto_approve", True)
     if auto:
         context.state.set("pipeline_status", "approved")
         set_stage(context, 4)

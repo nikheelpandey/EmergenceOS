@@ -79,6 +79,14 @@ class EventType(str, Enum):
     MEMORY_DELETED = "memory.deleted"
 
     # ------------------------------------------------------------------
+    # Artifact Events
+    # ------------------------------------------------------------------
+
+    ARTIFACT_CREATED = "artifact.created"
+    ARTIFACT_UPDATED = "artifact.updated"
+    ARTIFACT_DELETED = "artifact.deleted"
+
+    # ------------------------------------------------------------------
     # Executor Events
     # ------------------------------------------------------------------
 

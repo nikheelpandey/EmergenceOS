@@ -28,13 +28,13 @@ EmergenceOS should not compete with chat-first AI products on their terms. It sh
 
 | Traditional AI products | EmergenceOS |
 |-------------------------|-------------|
-| Revolve around **conversations** | Revolves around **goals, services, events, memory, and knowledge** |
+| Revolve around **conversations** | Revolves around **goals, artifacts, knowledge, events, and spaces** |
 | One assistant thread | Many coordinated workloads |
 | Memory is invisible | Knowledge accumulates and is browsable |
 | Time is turn-by-turn | Time is a first-class dimension |
 | Black box execution | Everything inspectable |
 
-Desktop operating systems revolve around files and applications. EmergenceOS revolves around **Goals, Knowledge, Events, and Spaces** — with Processes visible the way Activity Monitor makes background work legible without asking users to manage them.
+Desktop operating systems revolve around files and applications. EmergenceOS revolves around **Goals, Knowledge, Artifacts, Events, and Spaces** — with Processes visible the way Activity Monitor makes background work legible without asking users to manage them.
 
 ---
 
@@ -46,13 +46,16 @@ These are not UI panels. They are the **ontology of the product** — the primit
 Space
  └── Goal (living workload)
       ├── Processes (visible pipeline)
-      ├── Knowledge (accumulated intelligence)
+      ├── Knowledge (semantic intelligence — facts, summaries, embeddings)
+      ├── Artifacts (physical outputs — PDFs, datasets, code, resumes)
       ├── Timeline (temporal history)
       ├── Events (inspectable audit trail)
       └── Policies (capabilities, approvals, budgets)
 ```
 
-Six objects map to the user experience. Five exist in kernel form today; Spaces is the primary new primitive.
+Seven objects map to the user experience. Goals, Knowledge, Timeline, Events, and Spaces exist in kernel form; Artifacts is the newest first-class primitive (M30).
+
+**Do not build a File Manager.** Files are one kind of artifact. Users query artifacts by type, goal, and tags — not by `~/Documents/Resume_Final_v7.pdf`.
 
 ---
 
@@ -195,9 +198,18 @@ Chat products accumulate context invisibly. EmergenceOS makes intelligence **vis
 
 Knowledge is what Memory becomes when rendered for humans. Every Knowledge item links back to the `MemoryStoredEvent` that created it.
 
+### Knowledge vs Artifacts
+
+| Layer | Role | Examples |
+|-------|------|----------|
+| **Knowledge** | Semantic — facts, summaries, embeddings | findings, reports, evaluation notes |
+| **Artifacts** | Physical — durable outputs processes produce and consume | PDFs, resumes, datasets, codebases |
+
+Processes request artifacts by type (`artifact.search(type="resume")`), not filesystem path. Updates emit events; dependent processes wake automatically.
+
 ### Kernel status
 
-**Partial.** Memory categories (`WORKING`, `EPISODIC`, `SEMANTIC`), `MemoryStoredEvent`, TF-IDF vector index. Missing: aggregation layer with artifact typing, size accounting, and goal/space scoping.
+**Shipped (M22, M30).** `KnowledgeIndex` over memory events; `ArtifactService` for physical outputs with versioning, provenance, tags, and `artifact.*` tools. Missing: embedding-backed knowledge search in UI; Artifact Manager web panel.
 
 ---
 

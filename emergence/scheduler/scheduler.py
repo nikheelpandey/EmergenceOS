@@ -43,6 +43,9 @@ class Scheduler:
         EventType.PROCESS_COMPLETED,
         EventType.PROCESS_FAILED,
         EventType.PROCESS_CANCELLED,
+        EventType.ARTIFACT_CREATED,
+        EventType.ARTIFACT_UPDATED,
+        EventType.ARTIFACT_DELETED,
     })
 
     def __init__(
@@ -90,6 +93,12 @@ class Scheduler:
             EventType.PROCESS_CANCELLED,
             self._on_event,
         )
+        for event_type in (
+            EventType.ARTIFACT_CREATED,
+            EventType.ARTIFACT_UPDATED,
+            EventType.ARTIFACT_DELETED,
+        ):
+            self._event_bus.subscribe(event_type, self._on_event)
 
     # ------------------------------------------------------------------
     # Queue Operations

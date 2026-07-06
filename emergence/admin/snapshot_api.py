@@ -79,6 +79,22 @@ def build_goal_payload(kernel: Kernel, goal_id: str) -> dict[str, Any]:
     return view
 
 
+def build_goal_policy_payload(kernel: Kernel, goal_id: str) -> dict[str, Any]:
+    from emergence.core.ids import GoalID
+
+    parsed = GoalID.from_string(goal_id)
+    if kernel.context.goal_registry.get(parsed) is None:
+        raise KeyError(goal_id)
+    usage = kernel.context.goal_registry.policy_usage(parsed)
+    if usage is None:
+        return {
+            "goal_id": goal_id,
+            "policy": None,
+            "message": "No policy configured for this goal.",
+        }
+    return {"goal_id": goal_id, **usage}
+
+
 def build_knowledge_payload(
     kernel: Kernel,
     *,
@@ -116,6 +132,47 @@ def build_knowledge_artifact_payload(
     if artifact is None:
         raise KeyError(artifact_id)
     return index._to_view(artifact, include_content=True)  # noqa: SLF001
+
+
+def build_artifacts_payload(
+    kernel: Kernel,
+    *,
+    goal_id: str | None = None,
+    artifact_type: str | None = None,
+    space_id: str | None = None,
+    query: str | None = None,
+) -> dict[str, Any]:
+    from emergence.core.ids import GoalID
+
+    service = kernel.context.artifact_service
+    parsed_goal = GoalID.from_string(goal_id) if goal_id else None
+    artifacts = service.search(
+        query=query,
+        artifact_type=artifact_type,
+        goal_id=parsed_goal,
+        space_id=space_id,
+        include_content=True,
+    )
+    summary = (
+        service.summarize_goal(parsed_goal)
+        if parsed_goal is not None
+        else None
+    )
+    return {
+        "artifacts": artifacts,
+        "summary": summary,
+    }
+
+
+def build_physical_artifact_payload(
+    kernel: Kernel,
+    artifact_id: str,
+) -> dict[str, Any]:
+    service = kernel.context.artifact_service
+    record = service.get(artifact_id)
+    if record is None:
+        raise KeyError(artifact_id)
+    return service._to_view(record, include_content=True)  # noqa: SLF001
 
 
 def build_goal_results_payload(kernel: Kernel, goal_id: str) -> dict[str, Any]:

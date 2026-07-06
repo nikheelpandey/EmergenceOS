@@ -2,7 +2,7 @@
 
 > Living tracker for kernel and product milestones.
 >
-> **Last updated:** 2026-07-05 (M29 complete — all milestones done)
+> **Last updated:** 2026-07-06 (M30 complete)
 >
 > **Sources:** [docs/003-system-model.md](docs/003-system-model.md) · [docs/001-principles.md](docs/001-principles.md) · [docs/005-ux-vision.md](docs/005-ux-vision.md) · [docs/building-applications.md](docs/building-applications.md)
 
@@ -42,6 +42,7 @@
 | M27 | Spaces                       | Complete | M21, M22, M26 | P14, P16 |
 | M28 | Scheduled Work & Cron        | Complete | M4, M23    | P4, P6     |
 | M29 | Channel Ingress              | Complete | M25        | P4         |
+| M30 | Artifact Service             | Complete | M20, M21, M27 | P5, P10 |
 
 
 ---
@@ -986,6 +987,39 @@ M23 ──► M28
 
 ---
 
+## M30 — Artifact Service
+
+**Goal:** Physical artifacts as a first-class kernel primitive — queryable, versioned, event-driven outputs that processes consume by type, not file path.
+
+**Principles:** P5 (Memory & Durability), P10 (Observability)
+
+**Depends on:** M20, M21, M27
+
+**Status:** Complete
+
+### Deliverables
+
+- [x] `ArtifactService` on `KernelContext` — create, read, update, delete, search, version, watch, link, export
+- [x] Typed artifacts with goal/process/space provenance, tags, metadata, and lineage versioning
+- [x] Blob storage + `artifacts.json` persistence (separate from Knowledge semantic index)
+- [x] Events: `artifact.created`, `artifact.updated`, `artifact.deleted` — scheduler wake on artifact changes
+- [x] Kernel tools `artifact.*` with `artifact.read` / `artifact.write` capabilities
+- [x] HTTP: `GET /artifacts`, `GET /artifacts/{id}`, `GET /goals/{id}/artifacts`
+- [x] Admin API: `artifacts.list`, `artifacts.get`
+
+### Acceptance Criteria
+
+- [x] Process finds artifacts by type/query without filesystem paths or LLM
+- [x] Artifact update emits `artifact.updated` and supersedes prior version
+- [x] Artifacts survive restart via `EMERGENCE_DATA_DIR`
+- [x] Knowledge and Artifacts remain separate subsystems (semantic vs physical)
+
+### Key Files
+
+`emergence/artifacts/service.py` · `emergence/events/artifact_events.py` · `emergence/tools/artifact_tools.py` · `tests/unit/artifacts/` · `tests/integration/test_artifact_integration.py`
+
+---
+
 ## Ready for UX checklist
 
 Before starting M26 (web UI):
@@ -1005,6 +1039,8 @@ Before starting M26 (web UI):
 
 | Date       | Entry                                                                      |
 | ---------- | -------------------------------------------------------------------------- |
+| 2026-07-06 | **v0.4.0 release** — Artifact Service (M30), OS tools, goal policies, web UI v2 (595 tests) |
+| 2026-07-06 | **M30 complete** — physical artifact kernel primitive, versioning, event-driven updates |
 | 2026-07-05 | **M24–M29 complete** — Event Inspector, HTTP ingress, Goal Inbox web UI, Spaces, Cron, Channel ingress (558 tests) |
 | 2026-07-05 | **M23 complete** — narrative timeline from event log, day grouping, admin `goal.timeline` API |
 | 2026-07-05 | **M21–M22 complete** — Goal Registry, Knowledge Layer |

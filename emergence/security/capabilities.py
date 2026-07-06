@@ -88,6 +88,20 @@ FILESYSTEM_WRITE = Capability(
 )
 
 # ==========================================================
+# Artifacts
+# ==========================================================
+
+ARTIFACT_READ = Capability(
+    "artifact.read",
+    "Read and search physical artifacts.",
+)
+
+ARTIFACT_WRITE = Capability(
+    "artifact.write",
+    "Create, update, and delete physical artifacts.",
+)
+
+# ==========================================================
 # Tool Execution
 # ==========================================================
 
@@ -158,6 +172,8 @@ CAPABILITY_BY_NAME: dict[str, Capability] = {
         PROCESS_INSPECT,
         FILESYSTEM_READ,
         FILESYSTEM_WRITE,
+        ARTIFACT_READ,
+        ARTIFACT_WRITE,
         TOOL_PYTHON,
         TOOL_SHELL,
         TOOL_BROWSER,

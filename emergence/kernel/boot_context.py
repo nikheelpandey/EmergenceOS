@@ -21,6 +21,7 @@ from emergence.kernel.process_table import ProcessTable
 from emergence.kernel.registry import ProcessRegistry
 from emergence.kernel.state_store import StateStore
 from emergence.kernel.supervisor import Supervisor
+from emergence.artifacts.service import create_artifact_service
 from emergence.memory.knowledge_index import create_knowledge_index
 from emergence.memory.memory_manager import MemoryManager
 from emergence.memory.memory_store import MemoryStore
@@ -106,7 +107,7 @@ def create_kernel_context(
     exec_ = executor if executor is not None else Executor()
 
     tool_registry = ToolRegistry()
-    register_kernel_tools(
+    tool_services = register_kernel_tools(
         tool_registry,
         memory=memory,
         llm_provider=llm_provider,
@@ -122,6 +123,7 @@ def create_kernel_context(
     cognitive = CognitiveManager(event_bus=event_bus)
     goal_registry = GoalRegistry(event_bus=event_bus)
     knowledge_index = create_knowledge_index(event_bus)
+    artifact_service = create_artifact_service(event_bus)
     space_registry = SpaceRegistry()
     schedule_manager = ScheduleManager(event_bus=event_bus)
 
@@ -152,6 +154,7 @@ def create_kernel_context(
         cognitive=cognitive,
         goal_registry=goal_registry,
         knowledge_index=knowledge_index,
+        artifact_service=artifact_service,
         space_registry=space_registry,
         schedule_manager=schedule_manager,
     )
@@ -168,6 +171,7 @@ def create_kernel_context(
     memory.bind_space_resolver(_space_for_process)
     goal_registry.bind_context(ctx)
     knowledge_index.bind_context(ctx)
+    artifact_service.bind_context(ctx)
 
     if use_persist:
         restore_persistence(ctx)
@@ -176,7 +180,17 @@ def create_kernel_context(
             knowledge_index.rebuild_from_event_store(ctx.event_store)
         knowledge_index.reconcile_from_memory()
 
+    tool_services.bind(ctx)
+
     return ctx
+
+
+def bind_tools_kernel(kernel: Kernel) -> None:
+    """Attach a running kernel to tool handlers that spawn processes."""
+    registry = kernel.context.tools._registry  # noqa: SLF001
+    services = getattr(registry, "services", None)
+    if services is not None:
+        services.bind_kernel(kernel)
 
 
 def build_kernel(
@@ -212,6 +226,7 @@ def build_kernel(
         executor=ctx.executor,
         lifecycle=lifecycle,
     )
+    bind_tools_kernel(kernel)
 
     if enable_supervisor:
         Supervisor(
@@ -278,6 +293,7 @@ def build_system_model_demo() -> Kernel:
         ctx.registry.register(definition)
 
     kernel = Kernel(ctx=ctx, executor=ctx.executor, lifecycle=lifecycle)
+    bind_tools_kernel(kernel)
 
     Supervisor(
         kernel=kernel,
